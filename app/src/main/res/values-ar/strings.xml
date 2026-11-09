@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">سريع</string>
+
+    <string name="tab_all">الكل</string>
+    <string name="tab_active">قيد التحميل</string>
+    <string name="tab_done">مكتملة</string>
+
+    <string name="add_download">تحميل جديد</string>
+    <string name="add_hint">الصق رابط أو أكثر، كل رابط بسطر</string>
+    <string name="paste">لصق</string>
+    <string name="download">تحميل</string>
+    <string name="cancel">إلغاء</string>
+    <string name="no_valid_links">ما لقيت روابط صحيحة</string>
+    <string name="clipboard_found">نسخت رابط. تريد تحمّله؟</string>
+
+    <string name="empty_title">ماكو تحميلات بعد</string>
+    <string name="empty_body">اضغط «تحميل جديد»، أو شارك أي رابط من المتصفح لهذا التطبيق.</string>
+
+    <string name="pause">إيقاف مؤقت</string>
+    <string name="resume">استئناف</string>
+    <string name="retry">إعادة المحاولة</string>
+    <string name="delete">حذف</string>
+    <string name="delete_title">تحذف التحميل؟</string>
+    <string name="delete_file_too">احذف الملف من الجهاز هم</string>
+
+    <string name="status_queued">بالانتظار</string>
+    <string name="status_connecting">جاري الاتصال…</string>
+    <string name="status_saving">جاري الحفظ بالتنزيلات…</string>
+    <string name="status_paused">متوقف</string>
+    <string name="status_failed">فشل: %1$s</string>
+    <string name="not_resumable">السيرفر ما يدعم الاستئناف، راح يبدي من جديد</string>
+    <string name="connections_count">%1$d اتصال</string>
+
+    <string name="cat_video">فيديو</string>
+    <string name="cat_music">صوت</string>
+    <string name="cat_docs">مستند</string>
+    <string name="cat_archives">ملف مضغوط</string>
+    <string name="cat_apps">تطبيق</string>
+    <string name="cat_images">صورة</string>
+    <string name="cat_other">ملف</string>
+
+    <string name="settings">الإعدادات</string>
+    <string name="set_connections">عدد الاتصالات لكل ملف: %1$d</string>
+    <string name="set_connections_hint">كل ما زادت الاتصالات صار التحميل أسرع غالباً. بعض السيرفرات تحدد العدد المسموح.</string>
+    <string name="set_parallel">عدد الملفات اللي تتحمّل سوه: %1$d</string>
+    <string name="set_speed">حد السرعة (كيلوبايت/ثانية)</string>
+    <string name="unlimited">بلا حد</string>
+    <string name="set_sort">رتّب الملفات بمجلدات حسب النوع</string>
+    <string name="set_clipboard">اقترح تحميل الروابط اللي أنسخها</string>
+    <string name="set_location">مكان حفظ الملفات: %1$s</string>
+
+    <string name="notif_channel_progress">تقدّم التحميل</string>
+    <string name="notif_channel_done">التحميلات المكتملة</string>
+    <string name="notif_downloading">جاري تحميل %1$d ملف</string>
+    <string name="notif_done">اكتمل التحميل</string>
+    <string name="pause_all">إيقاف الكل</string>
+    <string name="no_app_to_open">ماكو تطبيق بالجهاز يفتح هذا الملف</string>
+</resources>

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sareea</string>
+
+    <string name="tab_all">All</string>
+    <string name="tab_active">In progress</string>
+    <string name="tab_done">Completed</string>
+
+    <string name="add_download">New download</string>
+    <string name="add_hint">Paste one or more links, one per line</string>
+    <string name="paste">Paste</string>
+    <string name="download">Download</string>
+    <string name="cancel">Cancel</string>
+    <string name="no_valid_links">No valid links found</string>
+    <string name="clipboard_found">Link copied. Download it?</string>
+
+    <string name="empty_title">No downloads yet</string>
+    <string name="empty_body">Tap New download, or share a link to this app from your browser.</string>
+
+    <string name="pause">Pause</string>
+    <string name="resume">Resume</string>
+    <string name="retry">Retry</string>
+    <string name="delete">Delete</string>
+    <string name="delete_title">Remove download?</string>
+    <string name="delete_file_too">Also delete the file from the phone</string>
+
+    <string name="status_queued">Waiting in queue</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_saving">Saving to Downloads…</string>
+    <string name="status_paused">Paused</string>
+    <string name="status_failed">Failed: %1$s</string>
+    <string name="not_resumable">server cannot resume, will restart</string>
+    <string name="connections_count">%1$d connections</string>
+
+    <string name="cat_video">Video</string>
+    <string name="cat_music">Audio</string>
+    <string name="cat_docs">Document</string>
+    <string name="cat_archives">Archive</string>
+    <string name="cat_apps">App</string>
+    <string name="cat_images">Image</string>
+    <string name="cat_other">File</string>
+
+    <string name="settings">Settings</string>
+    <string name="set_connections">Connections per file: %1$d</string>
+    <string name="set_connections_hint">More connections usually means faster downloads. Some servers limit how many they allow.</string>
+    <string name="set_parallel">Files downloading at once: %1$d</string>
+    <string name="set_speed">Speed limit (KB/s)</string>
+    <string name="unlimited">Unlimited</string>
+    <string name="set_sort">Sort files into folders by type</string>
+    <string name="set_clipboard">Offer to download copied links</string>
+    <string name="set_location">Files are saved in: %1$s</string>
+
+    <string name="notif_channel_progress">Download progress</string>
+    <string name="notif_channel_done">Finished downloads</string>
+    <string name="notif_downloading">Downloading %1$d file(s)</string>
+    <string name="notif_done">Download complete</string>
+    <string name="pause_all">Pause all</string>
+    <string name="no_app_to_open">No app on this phone can open this file</string>
+</resources>
