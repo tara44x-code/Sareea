@@ -1,4 +1,4 @@
-package com.sareea.downloader.ui
+package com.sdm.plus.ui
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -24,7 +24,7 @@ private val Dark = darkColorScheme(
 )
 
 @Composable
-fun SareeaTheme(content: @Composable () -> Unit) {
+fun SDMTheme(content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()
     val ctx = LocalContext.current
     val scheme = when {

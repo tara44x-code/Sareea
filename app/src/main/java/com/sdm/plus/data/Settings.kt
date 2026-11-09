@@ -1,4 +1,4 @@
-package com.sareea.downloader.data
+package com.sdm.plus.data
 
 import android.content.Context
 
@@ -7,10 +7,10 @@ class Settings(context: Context) {
 
     /** Connections per file (1..32). */
     var connections: Int
-        get() = p.getInt("connections", 8)
+        get() = p.getInt("connections", 16)
         set(v) = p.edit().putInt("connections", v.coerceIn(1, 32)).apply()
 
-    /** How many files download at the same time; the rest wait in the queue. */
+    /** How many downloads run at the same time; the rest wait in the queue. */
     var maxParallel: Int
         get() = p.getInt("maxParallel", 3)
         set(v) = p.edit().putInt("maxParallel", v.coerceIn(1, 5)).apply()
@@ -27,4 +27,22 @@ class Settings(context: Context) {
     var watchClipboard: Boolean
         get() = p.getBoolean("watchClipboard", true)
         set(v) = p.edit().putBoolean("watchClipboard", v).apply()
+
+    /** Only download over Wi-Fi (or any unmetered network). */
+    var wifiOnly: Boolean
+        get() = p.getBoolean("wifiOnly", false)
+        set(v) = p.edit().putBoolean("wifiOnly", v).apply()
+
+    /** Torrents only over Wi-Fi, even when [wifiOnly] is off. */
+    var torrentWifiOnly: Boolean
+        get() = p.getBoolean("torrentWifiOnly", true)
+        set(v) = p.edit().putBoolean("torrentWifiOnly", v).apply()
+
+    var lastEngineUpdate: Long
+        get() = p.getLong("lastEngineUpdate", 0)
+        set(v) = p.edit().putLong("lastEngineUpdate", v).apply()
+
+    var homePage: String
+        get() = p.getString("homePage", "https://www.google.com") ?: "https://www.google.com"
+        set(v) = p.edit().putString("homePage", v).apply()
 }

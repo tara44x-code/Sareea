@@ -1,13 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">سريع</string>
+    <string name="app_name">SDM+</string>
+    <string name="process_text_label">تحميل بـ SDM+</string>
 
     <string name="tab_all">الكل</string>
-    <string name="tab_active">قيد التحميل</string>
+    <string name="tab_active">جارية</string>
     <string name="tab_done">مكتملة</string>
 
     <string name="add_download">تحميل جديد</string>
-    <string name="add_hint">الصق رابط أو أكثر، كل رابط بسطر</string>
+    <string name="add_hint">الصق روابط: ملفات، فيديوهات (يوتيوب، تيك توك…) أو روابط magnet. كل رابط بسطر.</string>
     <string name="paste">لصق</string>
     <string name="download">تحميل</string>
     <string name="cancel">إلغاء</string>
@@ -15,7 +16,7 @@
     <string name="clipboard_found">نسخت رابط. تريد تحمّله؟</string>
 
     <string name="empty_title">ماكو تحميلات بعد</string>
-    <string name="empty_body">اضغط «تحميل جديد»، أو شارك أي رابط من المتصفح لهذا التطبيق.</string>
+    <string name="empty_body">اضغط «تحميل جديد»، أو شارك أي رابط لـ SDM+، أو افتح المتصفح الداخلي وحمّل من أي موقع.</string>
 
     <string name="pause">إيقاف مؤقت</string>
     <string name="resume">استئناف</string>
@@ -31,6 +32,12 @@
     <string name="status_failed">فشل: %1$s</string>
     <string name="not_resumable">السيرفر ما يدعم الاستئناف، راح يبدي من جديد</string>
     <string name="connections_count">%1$d اتصال</string>
+    <string name="peers_count">%1$d مصدر (%2$d كامل)</string>
+    <string name="eta_left">باقي %1$s</string>
+    <string name="note_wifi">بانتظار الواي فاي…</string>
+    <string name="note_check">جاري فحص الملفات…</string>
+    <string name="note_meta">جاري جلب معلومات التورنت…</string>
+    <string name="note_engine">جاري تجهيز محرك الفيديو…</string>
 
     <string name="cat_video">فيديو</string>
     <string name="cat_music">صوت</string>
@@ -38,22 +45,58 @@
     <string name="cat_archives">ملف مضغوط</string>
     <string name="cat_apps">تطبيق</string>
     <string name="cat_images">صورة</string>
+    <string name="cat_torrent">تورنت</string>
     <string name="cat_other">ملف</string>
+
+    <string name="resume_all">استئناف الكل</string>
+    <string name="pause_all">إيقاف الكل</string>
+    <string name="clear_completed">امسح المكتملة من القائمة</string>
+    <string name="export_links">تصدير الروابط</string>
+    <string name="export_empty">ماكو روابط للتصدير</string>
+    <string name="torrent_files_saved">الملفات محفوظة بمجلد Download/SDM/Torrents</string>
+
+    <string name="loading_video">جاري قراءة جودات الفيديو…</string>
+    <string name="loading_torrent">جاري جلب ملفات التورنت…</string>
+    <string name="in_background">بالخلفية</string>
+    <string name="error_prefix">ما گدرت أقراه: %1$s</string>
+    <string name="quality_best">أفضل جودة</string>
+    <string name="audio_m4a">صوت بس (M4A)</string>
+    <string name="audio_mp3">صوت بس (MP3)</string>
+    <string name="size_unknown">الحجم غير معروف</string>
+    <string name="select_all">تحديد الكل</string>
+    <string name="selected_size">المحدد: %1$s</string>
+    <string name="grab_title">ملفات بالصفحة (%1$d)</string>
+    <string name="grab_none">ما لقيت ملفات للتحميل بهذي الصفحة</string>
+
+    <string name="browser">المتصفح</string>
+    <string name="address_hint">ابحث أو اكتب العنوان</string>
+    <string name="video_from_page">حمّل الفيديو من هذي الصفحة</string>
+    <string name="grab_links">التقط كل ملفات الصفحة</string>
+    <string name="home">الرئيسية</string>
+    <string name="download_video">حمّل الفيديو</string>
+    <string name="catch_started">جاري التحميل: %1$s</string>
+    <string name="cannot_catch">هذا التحميل ما ينلگط (الصفحة تسويه داخلياً)</string>
 
     <string name="settings">الإعدادات</string>
     <string name="set_connections">عدد الاتصالات لكل ملف: %1$d</string>
     <string name="set_connections_hint">كل ما زادت الاتصالات صار التحميل أسرع غالباً. بعض السيرفرات تحدد العدد المسموح.</string>
-    <string name="set_parallel">عدد الملفات اللي تتحمّل سوه: %1$d</string>
+    <string name="set_parallel">التحميلات بنفس الوقت: %1$d</string>
     <string name="set_speed">حد السرعة (كيلوبايت/ثانية)</string>
     <string name="unlimited">بلا حد</string>
+    <string name="set_wifi_only">حمّل على الواي فاي بس</string>
+    <string name="set_torrent_wifi">التورنت على الواي فاي بس</string>
     <string name="set_sort">رتّب الملفات بمجلدات حسب النوع</string>
     <string name="set_clipboard">اقترح تحميل الروابط اللي أنسخها</string>
+    <string name="set_home">الصفحة الرئيسية للمتصفح</string>
+    <string name="set_engine">محرك الفيديو</string>
+    <string name="set_engine_update">حدّث محرك الفيديو هسه</string>
+    <string name="engine_updated">تحدّث محرك الفيديو %1$s</string>
+    <string name="engine_update_failed">فشل التحديث، تأكد من النت</string>
     <string name="set_location">مكان حفظ الملفات: %1$s</string>
 
     <string name="notif_channel_progress">تقدّم التحميل</string>
     <string name="notif_channel_done">التحميلات المكتملة</string>
     <string name="notif_downloading">جاري تحميل %1$d ملف</string>
     <string name="notif_done">اكتمل التحميل</string>
-    <string name="pause_all">إيقاف الكل</string>
     <string name="no_app_to_open">ماكو تطبيق بالجهاز يفتح هذا الملف</string>
 </resources>

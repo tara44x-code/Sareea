@@ -1,4 +1,4 @@
-package com.sareea.downloader.service
+package com.sdm.plus.service
 
 import android.Manifest
 import android.app.Notification
@@ -12,10 +12,10 @@ import android.os.Build
 import android.text.format.Formatter
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import com.sareea.downloader.R
-import com.sareea.downloader.engine.FileUtils
-import com.sareea.downloader.model.DownloadItem
-import com.sareea.downloader.ui.MainActivity
+import com.sdm.plus.R
+import com.sdm.plus.engine.FileUtils
+import com.sdm.plus.model.DownloadItem
+import com.sdm.plus.ui.MainActivity
 
 object Notifications {
     private const val CH_PROGRESS = "progress"

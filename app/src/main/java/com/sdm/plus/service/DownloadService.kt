@@ -1,4 +1,4 @@
-package com.sareea.downloader.service
+package com.sdm.plus.service
 
 import android.app.Service
 import android.content.Context
@@ -8,8 +8,8 @@ import android.os.IBinder
 import android.os.SystemClock
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import com.sareea.downloader.App
-import com.sareea.downloader.model.Status
+import com.sdm.plus.App
+import com.sdm.plus.model.Status
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -90,7 +90,7 @@ class DownloadService : Service() {
     }
 
     companion object {
-        const val ACTION_PAUSE_ALL = "com.sareea.downloader.PAUSE_ALL"
+        const val ACTION_PAUSE_ALL = "com.sdm.plus.PAUSE_ALL"
 
         @Volatile
         private var isRunning = false

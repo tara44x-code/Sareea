@@ -3,8 +3,10 @@ name: Build APK
 on:
   push:
     branches: [ main ]
-  pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -19,15 +21,51 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
+      - name: Load signing key
+        env:
+          KS_B64: ${{ secrets.SDM_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.SDM_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$KS_B64" ] && [ -n "$KS_PASS" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/sdm.jks"
+            echo "SDM_KEYSTORE_FILE=$RUNNER_TEMP/sdm.jks" >> "$GITHUB_ENV"
+            echo "SDM_KEYSTORE_PASSWORD=$KS_PASS" >> "$GITHUB_ENV"
+            echo "Signing with the fixed SDM+ key"
+          else
+            echo "::warning::Secrets SDM_KEYSTORE_B64 / SDM_KEYSTORE_PASSWORD are missing; using a temporary key. Updates will not install over this build."
+          fi
+
       - name: Build APKs
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug assembleRelease --stacktrace
+          ./gradlew assembleRelease --stacktrace
+
+      - name: Rename APKs
+        run: |
+          mkdir -p out
+          for f in app/build/outputs/apk/release/*.apk; do
+            n=$(basename "$f")
+            case "$n" in
+              *arm64-v8a*)   cp "$f" "out/SDM-plus-arm64.apk" ;;
+              *armeabi-v7a*) cp "$f" "out/SDM-plus-arm32-old-phones.apk" ;;
+              *x86_64*)      cp "$f" "out/SDM-plus-x86_64-emulator.apk" ;;
+              *)             cp "$f" "out/$n" ;;
+            esac
+          done
+          ls -la out
 
       - name: Upload APKs
         uses: actions/upload-artifact@v5
         with:
-          name: Sareea-apk
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk
+          name: SDM-plus-apk
+          path: out/*.apk
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.0.${{ github.run_number }}
+          name: SDM+ 2.0 (build ${{ github.run_number }})
+          body: |
+            Install **SDM-plus-arm64.apk** (works on almost every phone from the last 7 years).
+            Use the arm32 file only for very old phones.
+          files: out/*.apk

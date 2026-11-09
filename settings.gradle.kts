@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Sareea"
+rootProject.name = "SDMPlus"
 include(":app")

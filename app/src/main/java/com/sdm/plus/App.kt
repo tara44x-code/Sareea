@@ -1,10 +1,10 @@
-package com.sareea.downloader
+package com.sdm.plus
 
 import android.app.Application
-import com.sareea.downloader.data.Settings
-import com.sareea.downloader.data.Store
-import com.sareea.downloader.engine.DownloadEngine
-import com.sareea.downloader.service.DownloadService
+import com.sdm.plus.data.Settings
+import com.sdm.plus.data.Store
+import com.sdm.plus.engine.DownloadEngine
+import com.sdm.plus.service.DownloadService
 import java.io.File
 
 class App : Application() {

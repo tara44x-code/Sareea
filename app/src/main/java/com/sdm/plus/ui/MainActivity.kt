@@ -1,25 +1,24 @@
-package com.sareea.downloader.ui
+package com.sdm.plus.ui
 
 import android.Manifest
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.runtime.mutableStateOf
 import androidx.core.content.ContextCompat
-import com.sareea.downloader.App
-import com.sareea.downloader.engine.FileUtils
+import com.sdm.plus.App
+import com.sdm.plus.engine.FileUtils
 
 class MainActivity : ComponentActivity() {
 
-    private val sharedText = mutableStateOf<String?>(null)
-    private val clipboardUrl = mutableStateOf<String?>(null)
+    private val incoming = Incoming()
     private var lastClipTs = 0L
     private var lastClipUrl: String? = null
 
@@ -40,8 +39,8 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            SareeaTheme {
-                AppRoot(app.engine, app.settings, sharedText, clipboardUrl)
+            SDMTheme {
+                AppRoot(app.engine, app.settings, incoming)
             }
         }
     }
@@ -58,8 +57,24 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
-        if (intent?.action == Intent.ACTION_SEND) {
-            intent.getStringExtra(Intent.EXTRA_TEXT)?.let { sharedText.value = it }
+        intent ?: return
+        when (intent.action) {
+            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)?.let { incoming.text.value = it }
+            Intent.ACTION_PROCESS_TEXT ->
+                intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.let { incoming.text.value = it.toString() }
+            Intent.ACTION_VIEW -> {
+                val data: Uri = intent.data ?: return
+                when (data.scheme?.lowercase()) {
+                    "http", "https", "magnet" -> incoming.text.value = data.toString()
+                    "content", "file" -> {
+                        // A .torrent file opened from a file manager or another app.
+                        val bytes = runCatching {
+                            contentResolver.openInputStream(data)?.use { it.readBytes() }
+                        }.getOrNull()
+                        if (bytes != null && bytes.isNotEmpty()) incoming.torrent.value = bytes
+                    }
+                }
+            }
         }
     }
 
@@ -80,10 +95,12 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) {
             null
         }
-        val url = FileUtils.extractUrls(text).firstOrNull() ?: return
+        val url = FileUtils.extractUrls(text).firstOrNull()
+            ?: text?.trim()?.takeIf { it.startsWith("magnet:", true) }
+            ?: return
         if (url == lastClipUrl) return
         lastClipUrl = url
         if (app.engine.items.value.any { it.url == url }) return
-        clipboardUrl.value = url
+        incoming.clipboardUrl.value = url
     }
 }

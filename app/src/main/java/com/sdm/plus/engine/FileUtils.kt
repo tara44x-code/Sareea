@@ -1,4 +1,4 @@
-package com.sareea.downloader.engine
+package com.sdm.plus.engine
 
 import android.content.ActivityNotFoundException
 import android.content.ContentValues
@@ -9,17 +9,17 @@ import android.os.Environment
 import android.provider.MediaStore
 import android.webkit.MimeTypeMap
 import android.widget.Toast
-import com.sareea.downloader.R
-import com.sareea.downloader.model.DownloadItem
+import com.sdm.plus.R
+import com.sdm.plus.model.DownloadItem
 import java.io.File
 import java.io.IOException
 import java.net.URLDecoder
 
 object FileUtils {
-    const val ROOT_FOLDER = "Sareea"
+    const val ROOT_FOLDER = "SDM"
 
     private val illegal = Regex("""[\\/:*?"<>|\u0000-\u001f]""")
-    private val urlRegex = Regex("""https?://[^\s<>"'`]+""", RegexOption.IGNORE_CASE)
+    private val urlRegex = Regex("""(?:https?://|magnet:\?)[^\s<>"'`]+""", RegexOption.IGNORE_CASE)
 
     /** Picks a file name from the server headers, falling back to the link. */
     fun nameFrom(contentDisposition: String?, url: String, contentType: String?): String {
@@ -57,19 +57,30 @@ object FileUtils {
         "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "epub", "csv", "rtf", "odt" -> "Documents"
         "zip", "rar", "7z", "tar", "gz", "bz2", "xz", "iso" -> "Compressed"
         "apk", "apks", "xapk", "exe", "msi", "dmg", "deb" -> "Programs"
+        "torrent" -> "Torrents"
         "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic" -> "Images"
         else -> "Other"
     }
 
     fun mimeOf(name: String): String =
+        if (name.endsWith(".torrent", true)) "application/x-bittorrent" else
         MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase())
             ?: "application/octet-stream"
 
-    /** Moves the finished file into Download/Sareea/<type>/ so every app can see it. */
-    fun publish(context: Context, temp: File, name: String, category: String, sortByType: Boolean): Uri {
-        val rel = Environment.DIRECTORY_DOWNLOADS + "/" + ROOT_FOLDER + if (sortByType) "/$category" else ""
+    /**
+     * Copies the finished file into Download/SDM/[subFolder]/ so every app can see it.
+     * [subFolder] may contain several levels ("Torrents/Show/Season 1") or be null.
+     */
+    fun publish(context: Context, temp: File, name: String, subFolder: String?): Uri {
+        val sub = subFolder
+            ?.split('/')
+            ?.map { it.replace(illegal, "_").trim().trimStart('.') }
+            ?.filter { it.isNotBlank() }
+            ?.joinToString("/")
+            .orEmpty()
+        val rel = Environment.DIRECTORY_DOWNLOADS + "/" + ROOT_FOLDER + if (sub.isNotEmpty()) "/$sub" else ""
         val values = ContentValues().apply {
-            put(MediaStore.Downloads.DISPLAY_NAME, name)
+            put(MediaStore.Downloads.DISPLAY_NAME, name.replace(illegal, "_"))
             put(MediaStore.Downloads.MIME_TYPE, mimeOf(name))
             put(MediaStore.Downloads.RELATIVE_PATH, rel)
             put(MediaStore.Downloads.IS_PENDING, 1)
@@ -111,7 +122,7 @@ object FileUtils {
     fun extractUrls(text: String?, lenient: Boolean = false): List<String> {
         if (text.isNullOrBlank()) return emptyList()
         val found = urlRegex.findAll(text)
-            .map { it.value.trimEnd('.', ',', ')', ']', ';') }
+            .map { if (it.value.startsWith("magnet:", true)) it.value else it.value.trimEnd('.', ',', ')', ']', ';') }
             .toMutableList()
         if (found.isEmpty() && lenient) {
             text.split(Regex("""\s+"""))
