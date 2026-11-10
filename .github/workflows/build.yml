@@ -27,9 +27,20 @@ jobs:
           KS_PASS: ${{ secrets.SDM_KEYSTORE_PASSWORD }}
         run: |
           if [ -n "$KS_B64" ] && [ -n "$KS_PASS" ]; then
-            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/sdm.jks"
+            # Phones often add spaces/line breaks when pasting; strip them.
+            printf '%s' "$KS_B64" | tr -d ' \r\n\t' > "$RUNNER_TEMP/ks.b64"
+            echo "Key text length: $(wc -c < "$RUNNER_TEMP/ks.b64") characters (expected about 3500)"
+            if ! base64 -d "$RUNNER_TEMP/ks.b64" > "$RUNNER_TEMP/sdm.jks" 2>/dev/null; then
+              echo "::error::SDM_KEYSTORE_B64 is not valid. Paste the whole long line from SDM-secrets.txt again."
+              exit 1
+            fi
+            PASS=$(printf '%s' "$KS_PASS" | tr -d ' \r\n\t')
+            if ! keytool -list -keystore "$RUNNER_TEMP/sdm.jks" -storetype PKCS12 -storepass "$PASS" > /dev/null 2>&1; then
+              echo "::error::The key or its password does not match. Check SDM_KEYSTORE_PASSWORD (2nd line of SDM-secrets.txt) and that SDM_KEYSTORE_B64 was pasted completely."
+              exit 1
+            fi
             echo "SDM_KEYSTORE_FILE=$RUNNER_TEMP/sdm.jks" >> "$GITHUB_ENV"
-            echo "SDM_KEYSTORE_PASSWORD=$KS_PASS" >> "$GITHUB_ENV"
+            echo "SDM_KEYSTORE_PASSWORD=$PASS" >> "$GITHUB_ENV"
             echo "Signing with the fixed SDM+ key"
           else
             echo "::warning::Secrets SDM_KEYSTORE_B64 / SDM_KEYSTORE_PASSWORD are missing; using a temporary key. Updates will not install over this build."
