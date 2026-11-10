@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, androidx.compose.ui.text.ExperimentalTextApi::class)
 
 package com.sdm.plus.ui
 
@@ -56,7 +56,11 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -216,7 +220,12 @@ private fun MainScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.app_name), fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.headlineSmall.copy(brush = Neon.brush, fontWeight = FontWeight.Black),
+                    )
+                },
                 actions = {
                     IconButton(onClick = onOpenBrowser) {
                         Icon(Icons.Filled.Public, contentDescription = stringResource(R.string.browser))
@@ -265,11 +274,7 @@ private fun MainScreen(
             )
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = onAdd,
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text(stringResource(R.string.add_download)) },
-            )
+            NeonButton(stringResource(R.string.add_download), Icons.Filled.Add, onAdd)
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
@@ -291,7 +296,7 @@ private fun MainScreen(
                 Text(
                     "⬇ " + Formatter.formatShortFileSize(context, totalSpeed) + "/s",
                     style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = Neon.Cyan,
                     modifier = Modifier.padding(start = 16.dp, top = 8.dp),
                 )
             }
@@ -352,7 +357,11 @@ private fun DownloadCard(item: DownloadItem, engine: DownloadEngine) {
     val noVideoMsg = stringResource(R.string.no_video_yet)
     val copiedMsg = stringResource(R.string.link_copied)
 
-    ElevatedCard(
+    val active = item.status == Status.DOWNLOADING
+    Card(
+        border = BorderStroke(if (active) 1.5.dp else 1.dp, if (active) Neon.brush else SolidColor(MaterialTheme.colorScheme.outlineVariant)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        shape = RoundedCornerShape(18.dp),
         onClick = {
             if (item.status == Status.COMPLETED) {
                 if (item.finalUri != null) FileUtils.open(context, item)
@@ -365,16 +374,23 @@ private fun DownloadCard(item: DownloadItem, engine: DownloadEngine) {
             Modifier.padding(start = 14.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(itemIcon(item), null, Modifier.size(36.dp), tint = MaterialTheme.colorScheme.primary)
+            Icon(
+                itemIcon(item), null, Modifier.size(36.dp),
+                tint = when (item.kind) { Kind.TORRENT -> Neon.Magenta; Kind.MEDIA -> Neon.Pink; Kind.HTTP -> Neon.Cyan },
+            )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(item.fileName, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(6.dp))
                 if (item.status != Status.COMPLETED && item.status != Status.QUEUED) {
                     if (item.totalBytes > 0 && item.note == null) {
-                        LinearProgressIndicator(progress = { item.progress }, modifier = Modifier.fillMaxWidth())
+                        NeonProgress(item.progress)
                     } else if (item.status == Status.DOWNLOADING || item.status == Status.CONNECTING || item.status == Status.SAVING) {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        LinearProgressIndicator(
+                            modifier = Modifier.fillMaxWidth(),
+                            color = Neon.Cyan,
+                            trackColor = Neon.Panel2,
+                        )
                     }
                     Spacer(Modifier.height(4.dp))
                 }

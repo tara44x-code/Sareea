@@ -177,17 +177,17 @@ fun BrowserScreen(
         floatingActionButton = {
             // Shown on video sites: one tap to pick a quality.
             if (MediaSupport.isMediaSite(pageUrl)) {
-                ExtendedFloatingActionButton(
-                    onClick = { currentFlow.submit(listOf(pageUrl), forceMedia = true) },
-                    icon = { Icon(Icons.Filled.Download, null) },
-                    text = { Text(stringResource(R.string.download_video)) },
+                NeonButton(
+                    stringResource(R.string.download_video),
+                    Icons.Filled.Download,
+                    { currentFlow.submit(listOf(pageUrl), forceMedia = true) },
                 )
             }
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
             if (progress in 1..99) {
-                LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth())
+                NeonProgress(progress / 100f)
             }
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
