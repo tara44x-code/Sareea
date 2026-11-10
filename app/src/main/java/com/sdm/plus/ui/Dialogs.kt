@@ -101,8 +101,8 @@ fun PrepDialogs(flow: AddFlow, engine: DownloadEngine) {
     when (val p = flow.prep) {
         null -> {}
         is Prep.Loading -> LoadingDialog(p, flow)
-        is Prep.Media -> QualityDialog(p, onDismiss = flow::dismiss) { choice ->
-            engine.addMedia(p.url, choice.format, choice.label, p.meta.title)
+        is Prep.Media -> QualityDialog(p, onDismiss = flow::dismiss) { choice, playlist ->
+            engine.addMedia(p.url, choice.format, choice.label, p.meta.title, playlist)
             flow.dismiss()
         }
         is Prep.Torrent -> TorrentFilesDialog(p, onDismiss = flow::dismiss) { selection ->
@@ -139,18 +139,31 @@ private fun LoadingDialog(p: Prep.Loading, flow: AddFlow) {
 }
 
 @Composable
-private fun QualityDialog(p: Prep.Media, onDismiss: () -> Unit, onPick: (MediaSupport.Choice) -> Unit) {
+private fun QualityDialog(p: Prep.Media, onDismiss: () -> Unit, onPick: (MediaSupport.Choice, Boolean) -> Unit) {
     val ctx = LocalContext.current
+    var wholeList by remember(p) { mutableStateOf(p.playlistOnly) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(p.meta.title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium) },
         text = {
             LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                if (p.canPlaylist) {
+                    item {
+                        Row(
+                            Modifier.fillMaxWidth().clickable(enabled = !p.playlistOnly) { wholeList = !wholeList },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(checked = wholeList, onCheckedChange = { if (!p.playlistOnly) wholeList = it })
+                            Text(stringResource(R.string.whole_playlist), style = MaterialTheme.typography.titleSmall)
+                        }
+                        HorizontalDivider()
+                    }
+                }
                 items(p.meta.choices) { c ->
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .clickable { onPick(c) }
+                            .clickable { onPick(c, wholeList) }
                             .padding(vertical = 12.dp, horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -163,8 +176,8 @@ private fun QualityDialog(p: Prep.Media, onDismiss: () -> Unit, onPick: (MediaSu
                         Spacer(Modifier.width(14.dp))
                         Text(choiceLabel(c.label), Modifier.weight(1f))
                         Text(
-                            if (c.sizeEstimate > 0) "~" + Formatter.formatShortFileSize(ctx, c.sizeEstimate)
-                            else stringResource(R.string.size_unknown),
+                            if (c.sizeEstimate > 0 && !wholeList) "~" + Formatter.formatShortFileSize(ctx, c.sizeEstimate)
+                            else if (wholeList) "" else stringResource(R.string.size_unknown),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

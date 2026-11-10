@@ -93,6 +93,29 @@ object MediaSupport {
         return Meta(info.title ?: info.fulltitle ?: url, info.duration, choices)
     }
 
+    /** Link points to a playlist (alone or together with a video). */
+    fun hasPlaylist(url: String): Boolean {
+        val u = runCatching { Uri.parse(url) }.getOrNull() ?: return false
+        return u.getQueryParameter("list") != null || u.path.orEmpty().contains("/playlist")
+    }
+
+    /** Link is only a playlist, with no single video in it. */
+    fun isPlaylistOnly(url: String): Boolean {
+        val u = runCatching { Uri.parse(url) }.getOrNull() ?: return false
+        return hasPlaylist(url) && u.getQueryParameter("v") == null && !url.contains("youtu.be/")
+    }
+
+    /** Quality list used for whole playlists (no per-video info needed). */
+    fun genericChoices(): List<Choice> = listOf(
+        Choice("BEST", BEST, 0),
+        Choice("1080p", "bv*[height<=1080]+ba/b[height<=1080]", 0),
+        Choice("720p", "bv*[height<=720]+ba/b[height<=720]", 0),
+        Choice("480p", "bv*[height<=480]+ba/b[height<=480]", 0),
+        Choice("360p", "bv*[height<=360]+ba/b[height<=360]", 0),
+        Choice("M4A", "ba[ext=m4a]/ba/b", 0),
+        Choice("MP3", MP3, 0),
+    )
+
     private fun sizeOf(a: Long, b: Long) = if (a > 0) a else b
 
     fun cancel(id: String) {

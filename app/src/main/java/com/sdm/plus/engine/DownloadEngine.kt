@@ -32,7 +32,9 @@ import okhttp3.Call
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import org.libtorrent4j.AnnounceEntry
 import org.libtorrent4j.Priority
+import org.libtorrent4j.TorrentFlags
 import org.libtorrent4j.TorrentHandle
 import org.libtorrent4j.TorrentInfo
 import org.libtorrent4j.TorrentStatus
@@ -82,6 +84,7 @@ class DownloadEngine(
     private val jobs = ConcurrentHashMap<String, Job>()
     private val running = ConcurrentHashMap<String, Running>()
     private val calls = ConcurrentHashMap<String, MutableSet<Call>>()
+    private val torrentHandles = ConcurrentHashMap<String, TorrentHandle>()
 
     val partialDir: File by lazy {
         File(context.getExternalFilesDir(null) ?: context.filesDir, "partial").apply { mkdirs() }
@@ -135,8 +138,8 @@ class DownloadEngine(
         )
     }
 
-    fun addMedia(url: String, format: String, label: String, title: String?) {
-        append(listOf(newMedia(url, System.currentTimeMillis(), format, label, title)))
+    fun addMedia(url: String, format: String, label: String, title: String?, playlist: Boolean = false) {
+        append(listOf(newMedia(url, System.currentTimeMillis(), format, label, title).copy(playlist = playlist)))
     }
 
     /** [torrentBytes] = already-fetched metadata (from the picker); null = fetch when it starts. */
@@ -218,6 +221,55 @@ class DownloadEngine(
     fun clearCompleted() {
         _items.update { list -> list.filterNot { it.status == Status.COMPLETED } }
         save()
+    }
+
+    /** Pieces in order, so a video can be watched while it downloads. */
+    fun setSequential(id: String, on: Boolean) {
+        edit(id) { it.copy(sequential = on) }
+        torrentHandles[id]?.let { th ->
+            runCatching { if (on) th.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD) else th.unsetFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD) }
+        }
+        save()
+    }
+
+    /** The partly-downloaded video of a torrent, to open in a player while it downloads. */
+    fun playableFile(id: String): File? {
+        val item = get(id) ?: return null
+        if (item.kind != Kind.TORRENT) return null
+        val dir = File(partialDir, id)
+        if (!dir.exists()) return null
+        return dir.walkTopDown()
+            .filter { it.isFile && FileUtils.categoryOf(it.name) in listOf("Video", "Music") }
+            .maxByOrNull { it.length() }
+    }
+
+    /** Replace an expired link; the download continues from where it stopped if it is the same file. */
+    fun changeUrl(id: String, newUrl: String) {
+        val item = get(id) ?: return
+        if (item.status != Status.PAUSED && item.status != Status.FAILED) return
+        edit(id) { it.copy(url = newUrl.trim(), urlChanged = true, error = null) }
+        save()
+    }
+
+    /** Called when the internet comes back: retry downloads that failed because of the network. */
+    fun onNetworkBack() {
+        if (!settings.autoResume) return
+        val networkWords = listOf(
+            "unable to resolve", "timeout", "timed out", "reset", "failed to connect", "network",
+            "connection", "socket", "unreachable", "closed early", "incomplete", "eof", "ssl",
+        )
+        var any = false
+        _items.value.filter { item ->
+            item.status == Status.FAILED && item.autoRetries < 5 &&
+                (item.error ?: "").lowercase().let { e -> networkWords.any { e.contains(it) } }
+        }.forEach { item ->
+            any = true
+            edit(item.id) { it.copy(status = Status.QUEUED, error = null, autoRetries = it.autoRetries + 1) }
+        }
+        if (any) {
+            save()
+            schedule()
+        }
     }
 
     private fun stopWork(id: String) {
@@ -318,6 +370,14 @@ class DownloadEngine(
         try {
             var item = get(id) ?: return
 
+            if (item.urlChanged) {
+                // New link for the same download: keep progress only if it is the same file.
+                val p = probe(id, item)
+                val same = p.resumable && p.length > 0 && p.length == item.totalBytes && temp.exists()
+                edit(id) { if (same) it.copy(urlChanged = false) else it.copy(urlChanged = false, segments = emptyList(), downloadedBytes = 0) }
+                item = get(id) ?: return
+            }
+
             if (item.segments.isEmpty() || !temp.exists() || !item.resumable) {
                 val p = probe(id, item)
                 coroutineContext.ensureActive()
@@ -383,7 +443,7 @@ class DownloadEngine(
             val cur = get(id) ?: return
             val uri = FileUtils.publish(context, temp, cur.fileName, subFolderFor(cur.category))
             temp.delete()
-            edit(id) { it.copy(status = Status.COMPLETED, finalUri = uri.toString()) }
+            edit(id) { it.copy(status = Status.COMPLETED, finalUri = uri.toString(), autoRetries = 0) }
         } catch (e: Throwable) {
             r?.let { flush(id, it) }
             throw e
@@ -519,10 +579,15 @@ class DownloadEngine(
         }
 
         val dir = File(partialDir, id).apply { mkdirs() }
+        if (settings.extraTrackers) TorrentSupport.refreshTrackers(client)
         val sm = TorrentSupport.session()
         val limit = settings.speedLimitKBps
         sm.downloadRateLimit(if (limit > 0) limit * 1024 else 0)
-        sm.download(ti, dir, null, priorities, null, torrent_flags_t())
+        val hash = ti.infoHash().toHex()
+        // Fast resume: continue straight away instead of re-checking every file.
+        val resume = if (File(dir, fs.filePath(selection.first())).exists()) TorrentSupport.resumeFileFor(hash) else null
+        val flags = if (get(id)?.sequential == true) TorrentFlags.SEQUENTIAL_DOWNLOAD else torrent_flags_t()
+        sm.download(ti, dir, resume, priorities, null, flags)
 
         var handle: TorrentHandle? = null
         for (i in 0 until 100) {
@@ -534,6 +599,12 @@ class DownloadEngine(
             delay(200)
         }
         val th = handle ?: throw IOException("Could not start the torrent")
+        torrentHandles[id] = th
+        if (settings.extraTrackers) {
+            // More trackers = more peers found = faster download.
+            TorrentSupport.cachedTrackers().forEach { runCatching { th.addTracker(AnnounceEntry(it)) } }
+        }
+        var finished = false
 
         try {
             th.resume()
@@ -556,13 +627,20 @@ class DownloadEngine(
                         note = if (checking) Notes.CHECKING else null,
                     )
                 }
-                if (!checking && wanted > 0 && done >= wanted) break
+                if (!checking && wanted > 0 && done >= wanted) {
+                    finished = true
+                    break
+                }
                 delay(1000)
             }
         } finally {
+            torrentHandles.remove(id, th)
+            if (!finished) TorrentSupport.saveResume(th)
             // Stop sharing as soon as we're done or paused (saves data and battery).
             runCatching { sm.remove(th) }
+            TorrentSupport.saveState()
         }
+        TorrentSupport.deleteResume(hash)
 
         // Copy the chosen files to Download/SDM/Torrents/<name>/...
         edit(id) { it.copy(status = Status.SAVING, speedBps = 0, peers = 0, seeds = 0) }
@@ -582,12 +660,14 @@ class DownloadEngine(
             it.copy(
                 status = Status.COMPLETED,
                 finalUri = if (selection.size == 1) first?.toString() else null,
+                autoRetries = 0,
             )
         }
     }
 
     // ================================================================ MEDIA
 
+    private val itemRe = Regex("""Downloading (?:item|video) (\d+) of (\d+)""")
     private val sizeRe = Regex("""of\s+~?\s*([\d.]+)\s*([KMGT]?i?B)""")
     private val speedRe = Regex("""at\s+([\d.]+)\s*([KMGT]?i?B)/s""")
 
@@ -613,10 +693,15 @@ class DownloadEngine(
         val dir = File(partialDir, id).apply { mkdirs() }
         val fmt = item.format ?: MediaSupport.BEST
         val req = YoutubeDLRequest(item.url)
-            .addOption("--no-playlist")
             .addOption("--no-mtime")
             .addOption("--newline")
-            .addOption("-o", File(dir, "%(title).120B.%(ext)s").absolutePath)
+        if (item.playlist) {
+            req.addOption("--yes-playlist")
+                .addOption("-o", File(dir, "%(playlist_title).80B/%(playlist_index)03d - %(title).100B.%(ext)s").absolutePath)
+        } else {
+            req.addOption("--no-playlist")
+                .addOption("-o", File(dir, "%(title).120B.%(ext)s").absolutePath)
+        }
         if (fmt.startsWith("mp3:")) {
             req.addOption("-f", fmt.removePrefix("mp3:"))
                 .addOption("-x")
@@ -624,6 +709,12 @@ class DownloadEngine(
         } else {
             req.addOption("-f", fmt)
                 .addOption("--merge-output-format", "mp4")
+            if (settings.subtitles && item.formatLabel != "M4A") {
+                req.addOption("--write-subs")
+                    .addOption("--write-auto-subs")
+                    .addOption("--sub-langs", "ar.*,en.*")
+                    .addOption("--embed-subs")
+            }
         }
         item.cookie?.takeIf { it.isNotBlank() }?.let { req.addOption("--add-header", "Cookie:$it") }
         item.userAgent?.let { req.addOption("--user-agent", it) }
@@ -633,6 +724,10 @@ class DownloadEngine(
         edit(id) { it.copy(status = Status.DOWNLOADING, note = null) }
         var last = 0L
         YoutubeDL.getInstance().execute(req, id) { progress, _, line ->
+            itemRe.find(line)?.let { m ->
+                val pos = "${m.groupValues[1]}/${m.groupValues[2]}"
+                edit(id) { it.copy(playlistPos = pos) }
+            }
             val now = System.currentTimeMillis()
             if (now - last < 500) return@execute
             last = now
@@ -650,22 +745,47 @@ class DownloadEngine(
         }
         coroutineContext.ensureActive()
 
-        val out = dir.listFiles()
-            ?.filter { it.isFile && !it.name.endsWith(".part") && !it.name.endsWith(".ytdl") && !it.name.contains(".part-") && !it.name.endsWith(".temp") }
-            ?.maxByOrNull { it.length() }
-            ?: throw IOException("yt-dlp finished but no file was produced")
+        val outputs = dir.walkTopDown()
+            .filter { f ->
+                f.isFile && !f.name.endsWith(".part") && !f.name.endsWith(".ytdl") && !f.name.contains(".part-") &&
+                    !f.name.endsWith(".temp") && !f.name.endsWith(".vtt") && !f.name.endsWith(".srt") && f.length() > 0
+            }
+            .toList()
+        if (outputs.isEmpty()) throw IOException("yt-dlp finished but no file was produced")
 
+        if (!item.playlist) {
+            val out = outputs.maxBy { it.length() }
+            edit(id) {
+                it.copy(
+                    status = Status.SAVING, speedBps = 0, fileName = out.name,
+                    category = FileUtils.categoryOf(out.name),
+                    totalBytes = out.length(), downloadedBytes = out.length(),
+                )
+            }
+            val cur = get(id) ?: return
+            val uri = FileUtils.publish(context, out, out.name, subFolderFor(cur.category))
+            dir.deleteRecursively()
+            edit(id) { it.copy(status = Status.COMPLETED, finalUri = uri.toString(), autoRetries = 0, playlistPos = null) }
+            return
+        }
+
+        // Playlist: every file goes to Download/SDM/<type>/<playlist name>/
+        val total = outputs.sumOf { it.length() }
+        val listName = outputs.first().parentFile?.takeIf { it != dir }?.name ?: item.fileName
+        edit(id) {
+            it.copy(status = Status.SAVING, speedBps = 0, fileName = listName, totalBytes = total, downloadedBytes = total)
+        }
+        val cat = FileUtils.categoryOf(outputs.first().name)
+        for (f in outputs.sortedBy { it.name }) {
+            FileUtils.publish(context, f, f.name, listOfNotNull(subFolderFor(cat), listName).joinToString("/"))
+        }
+        dir.deleteRecursively()
         edit(id) {
             it.copy(
-                status = Status.SAVING, speedBps = 0, fileName = out.name,
-                category = FileUtils.categoryOf(out.name),
-                totalBytes = out.length(), downloadedBytes = out.length(),
+                status = Status.COMPLETED, finalUri = null, category = cat,
+                playlistPos = "${outputs.size}", autoRetries = 0,
             )
         }
-        val cur = get(id) ?: return
-        val uri = FileUtils.publish(context, out, out.name, subFolderFor(cur.category))
-        dir.deleteRecursively()
-        edit(id) { it.copy(status = Status.COMPLETED, finalUri = uri.toString()) }
     }
 
     // ================================================================ progress (HTTP)

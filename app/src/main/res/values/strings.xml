@@ -99,4 +99,16 @@
     <string name="notif_downloading">Downloading %1$d file(s)</string>
     <string name="notif_done">Download complete</string>
     <string name="no_app_to_open">No app on this phone can open this file</string>
+    <string name="play_now">Play now</string>
+    <string name="sequential">Download in order (for watching)</string>
+    <string name="no_video_yet">No video file has started downloading yet</string>
+    <string name="change_link">Change link</string>
+    <string name="change_link_hint">Paste a fresh link to the same file. If it is the same file, the download continues from where it stopped.</string>
+    <string name="copy_link">Copy link</string>
+    <string name="link_copied">Link copied</string>
+    <string name="playlist">Playlist</string>
+    <string name="whole_playlist">Download the whole playlist</string>
+    <string name="set_auto_resume">Resume automatically when the internet returns</string>
+    <string name="set_trackers">Faster torrents (add public trackers)</string>
+    <string name="set_subtitles">Download Arabic/English subtitles with videos</string>
 </resources>

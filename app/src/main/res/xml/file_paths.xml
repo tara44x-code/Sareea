@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Partly downloaded torrent videos, for "play while downloading" -->
+    <external-files-path name="partial" path="partial/" />
+    <files-path name="partial_internal" path="partial/" />
+</paths>

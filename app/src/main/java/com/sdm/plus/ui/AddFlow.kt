@@ -19,7 +19,7 @@ import java.io.File
 /** What the add flow is currently showing. */
 sealed interface Prep {
     data class Loading(val message: Int, val url: String?) : Prep
-    data class Media(val url: String, val meta: MediaSupport.Meta) : Prep
+    data class Media(val url: String, val meta: MediaSupport.Meta, val canPlaylist: Boolean, val playlistOnly: Boolean) : Prep
     class Torrent(val source: String, val bytes: ByteArray, val meta: TorrentSupport.Meta) : Prep
     data class Grab(val urls: List<String>) : Prep
 }
@@ -55,8 +55,12 @@ class AddFlow(
                 }
                 Prep.Torrent(u, bytes, TorrentSupport.meta(bytes))
             }
+            (forceMedia || MediaSupport.isMediaSite(u)) && MediaSupport.isPlaylistOnly(u) -> {
+                // Whole playlist: no need to read every video first.
+                prep = Prep.Media(u, MediaSupport.Meta(context.getString(R.string.playlist), 0, MediaSupport.genericChoices()), true, true)
+            }
             forceMedia || MediaSupport.isMediaSite(u) -> load(R.string.loading_video, u) {
-                Prep.Media(u, MediaSupport.fetch(context, u))
+                Prep.Media(u, MediaSupport.fetch(context, u), MediaSupport.hasPlaylist(u), false)
             }
             else -> engine.addAuto(listOf(u))
         }

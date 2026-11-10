@@ -99,4 +99,16 @@
     <string name="notif_downloading">جاري تحميل %1$d ملف</string>
     <string name="notif_done">اكتمل التحميل</string>
     <string name="no_app_to_open">ماكو تطبيق بالجهاز يفتح هذا الملف</string>
+    <string name="play_now">شغّل هسه</string>
+    <string name="sequential">حمّل بالترتيب (حتى تشوفه وهو يتحمّل)</string>
+    <string name="no_video_yet">بعد ما بدى تحميل أي ملف فيديو</string>
+    <string name="change_link">تغيير الرابط</string>
+    <string name="change_link_hint">الصق رابط جديد لنفس الملف. إذا هو نفس الملف، التحميل يكمل من مكان ما وگف.</string>
+    <string name="copy_link">نسخ الرابط</string>
+    <string name="link_copied">تم نسخ الرابط</string>
+    <string name="playlist">قائمة تشغيل</string>
+    <string name="whole_playlist">حمّل قائمة التشغيل كلها</string>
+    <string name="set_auto_resume">كمّل التحميل وحده من يرجع النت</string>
+    <string name="set_trackers">تسريع التورنت (إضافة تراكرات عامة)</string>
+    <string name="set_subtitles">حمّل الترجمة العربية/الإنكليزية ويا الفيديو</string>
 </resources>

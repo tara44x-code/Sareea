@@ -27,6 +27,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FormatListNumbered
+import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.Android
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
@@ -86,7 +90,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.core.content.FileProvider
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -338,7 +345,12 @@ private fun EmptyState(onOpenBrowser: () -> Unit) {
 private fun DownloadCard(item: DownloadItem, engine: DownloadEngine) {
     val context = LocalContext.current
     var confirm by remember { mutableStateOf(false) }
+    var menu by remember { mutableStateOf(false) }
+    var newLink by remember { mutableStateOf<String?>(null) }
+    val clipboard = LocalClipboardManager.current
     val torrentSaved = stringResource(R.string.torrent_files_saved)
+    val noVideoMsg = stringResource(R.string.no_video_yet)
+    val copiedMsg = stringResource(R.string.link_copied)
 
     ElevatedCard(
         onClick = {
@@ -390,10 +402,95 @@ private fun DownloadCard(item: DownloadItem, engine: DownloadEngine) {
                     }
                 else -> {}
             }
-            IconButton(onClick = { confirm = true }) {
-                Icon(Icons.Filled.Delete, stringResource(R.string.delete))
+            Box {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, null) }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    if (item.kind == Kind.TORRENT && item.status != Status.COMPLETED) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.play_now)) },
+                            leadingIcon = { Icon(Icons.Filled.OndemandVideo, null) },
+                            onClick = {
+                                menu = false
+                                val f = engine.playableFile(item.id)
+                                if (f == null) {
+                                    Toast.makeText(context, noVideoMsg, Toast.LENGTH_SHORT).show()
+                                } else {
+                                    if (!item.sequential) engine.setSequential(item.id, true)
+                                    runCatching {
+                                        val uri = FileProvider.getUriForFile(context, context.packageName + ".files", f)
+                                        val i = Intent(Intent.ACTION_VIEW)
+                                            .setDataAndType(uri, FileUtils.mimeOf(f.name))
+                                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        context.startActivity(i)
+                                    }.onFailure { Toast.makeText(context, R.string.no_app_to_open, Toast.LENGTH_SHORT).show() }
+                                }
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.sequential)) },
+                            leadingIcon = { Icon(Icons.Filled.FormatListNumbered, null) },
+                            trailingIcon = { Checkbox(checked = item.sequential, onCheckedChange = null) },
+                            onClick = { menu = false; engine.setSequential(item.id, !item.sequential) },
+                        )
+                    }
+                    if (item.kind != Kind.TORRENT && (item.status == Status.PAUSED || item.status == Status.FAILED)) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.change_link)) },
+                            leadingIcon = { Icon(Icons.Filled.Edit, null) },
+                            onClick = { menu = false; newLink = item.url },
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.copy_link)) },
+                        leadingIcon = { Icon(Icons.Filled.ContentCopy, null) },
+                        onClick = {
+                            menu = false
+                            clipboard.setText(AnnotatedString(item.url))
+                            Toast.makeText(context, copiedMsg, Toast.LENGTH_SHORT).show()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.delete)) },
+                        leadingIcon = { Icon(Icons.Filled.Delete, null) },
+                        onClick = { menu = false; confirm = true },
+                    )
+                }
             }
         }
+    }
+
+    newLink?.let { current ->
+        var text by remember(item.id) { mutableStateOf(current) }
+        AlertDialog(
+            onDismissRequest = { newLink = null },
+            title = { Text(stringResource(R.string.change_link)) },
+            text = {
+                Column {
+                    Text(
+                        stringResource(R.string.change_link_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = text, onValueChange = { text = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val url = FileUtils.extractUrls(text).firstOrNull()
+                    if (url != null) {
+                        engine.changeUrl(item.id, url)
+                        engine.resume(item.id)
+                    }
+                    newLink = null
+                }) { Text(stringResource(R.string.resume)) }
+            },
+            dismissButton = { TextButton(onClick = { newLink = null }) { Text(stringResource(R.string.cancel)) } },
+        )
     }
 
     if (confirm) {
@@ -437,7 +534,8 @@ private fun statusLine(item: DownloadItem): String {
     } else size(item.downloadedBytes)
     val badge = when (item.kind) {
         Kind.TORRENT -> "Torrent • "
-        Kind.MEDIA -> (item.formatLabel?.let { choiceLabel(it) } ?: "") + " • "
+        Kind.MEDIA -> (item.formatLabel?.let { choiceLabel(it) } ?: "") +
+            (if (item.playlist) " • " + stringResource(R.string.playlist) + (item.playlistPos?.let { " $it" } ?: "") else "") + " • "
         Kind.HTTP -> ""
     }
 
@@ -524,6 +622,9 @@ private fun SettingsScreen(settings: Settings, onBack: () -> Unit) {
     var wifi by remember { mutableStateOf(settings.wifiOnly) }
     var torrentWifi by remember { mutableStateOf(settings.torrentWifiOnly) }
     var home by remember { mutableStateOf(settings.homePage) }
+    var subs by remember { mutableStateOf(settings.subtitles) }
+    var autoResume by remember { mutableStateOf(settings.autoResume) }
+    var trackers by remember { mutableStateOf(settings.extraTrackers) }
     var engineVersion by remember { mutableStateOf<String?>(null) }
     var updating by remember { mutableStateOf(false) }
     val updatedMsg = stringResource(R.string.engine_updated)
@@ -593,6 +694,9 @@ private fun SettingsScreen(settings: Settings, onBack: () -> Unit) {
 
             SwitchRow(stringResource(R.string.set_wifi_only), wifi) { wifi = it; settings.wifiOnly = it }
             SwitchRow(stringResource(R.string.set_torrent_wifi), torrentWifi) { torrentWifi = it; settings.torrentWifiOnly = it }
+            SwitchRow(stringResource(R.string.set_auto_resume), autoResume) { autoResume = it; settings.autoResume = it }
+            SwitchRow(stringResource(R.string.set_trackers), trackers) { trackers = it; settings.extraTrackers = it }
+            SwitchRow(stringResource(R.string.set_subtitles), subs) { subs = it; settings.subtitles = it }
             SwitchRow(stringResource(R.string.set_sort), sort) { sort = it; settings.sortByType = it }
             SwitchRow(stringResource(R.string.set_clipboard), clip) { clip = it; settings.watchClipboard = it }
             HorizontalDivider()

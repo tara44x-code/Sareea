@@ -53,6 +53,15 @@ data class DownloadItem(
     val userAgent: String? = null,
     // Short live state shown under the name (see [Notes])
     val note: String? = null,
+    // TORRENT: download pieces in order so the video can be played while downloading
+    val sequential: Boolean = false,
+    // MEDIA: whole YouTube playlist, and "3/20" progress inside it
+    val playlist: Boolean = false,
+    val playlistPos: String? = null,
+    // HTTP: link was replaced by the user; check the new one before resuming
+    val urlChanged: Boolean = false,
+    // How many times it was resumed automatically after the network came back
+    val autoRetries: Int = 0,
 ) {
     val progress: Float
         get() = if (totalBytes > 0) (downloadedBytes.toFloat() / totalBytes).coerceIn(0f, 1f) else 0f

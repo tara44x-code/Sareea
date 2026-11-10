@@ -45,4 +45,19 @@ class Settings(context: Context) {
     var homePage: String
         get() = p.getString("homePage", "https://www.google.com") ?: "https://www.google.com"
         set(v) = p.edit().putString("homePage", v).apply()
+
+    /** Download Arabic/English subtitles with videos (embedded in the file). */
+    var subtitles: Boolean
+        get() = p.getBoolean("subtitles", false)
+        set(v) = p.edit().putBoolean("subtitles", v).apply()
+
+    /** Resume failed downloads automatically when the internet comes back. */
+    var autoResume: Boolean
+        get() = p.getBoolean("autoResume", true)
+        set(v) = p.edit().putBoolean("autoResume", v).apply()
+
+    /** Add public trackers to every torrent to find more peers. */
+    var extraTrackers: Boolean
+        get() = p.getBoolean("extraTrackers", true)
+        set(v) = p.edit().putBoolean("extraTrackers", v).apply()
 }

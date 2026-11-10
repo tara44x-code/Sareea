@@ -55,6 +55,9 @@ class Store(private val file: File) {
         putStr("cookie", i.cookie)
         putStr("referer", i.referer)
         putStr("userAgent", i.userAgent)
+        put("sequential", i.sequential)
+        put("playlist", i.playlist)
+        put("urlChanged", i.urlChanged)
         put("selection", JSONArray().apply { i.selection.forEach { put(it) } })
         put("segments", JSONArray().apply {
             i.segments.forEach { s ->
@@ -84,6 +87,9 @@ class Store(private val file: File) {
             cookie = o.str("cookie"),
             referer = o.str("referer"),
             userAgent = o.str("userAgent"),
+            sequential = o.optBoolean("sequential", false),
+            playlist = o.optBoolean("playlist", false),
+            urlChanged = o.optBoolean("urlChanged", false),
             selection = if (sel == null) emptyList() else (0 until sel.length()).map { sel.getInt(it) },
             segments = if (segs == null) emptyList() else (0 until segs.length()).map {
                 val s = segs.getJSONObject(it)
