@@ -2,7 +2,17 @@
 
 package com.sdm.plus.ui
 
+import android.app.Activity
+import android.app.RecoverableSecurityException
+import android.content.Context
 import android.content.Intent
+import android.content.IntentSender
+import android.net.Uri
+import android.os.Build
+import android.provider.MediaStore
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import android.text.format.Formatter
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -200,6 +210,7 @@ private fun MainScreen(
 ) {
     val context = LocalContext.current
     val all by engine.items.collectAsStateWithLifecycle()
+    val requestDelete = rememberDeleteRequester(engine)
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var menu by remember { mutableStateOf(false) }
     val clipMsg = stringResource(R.string.clipboard_found)
@@ -313,7 +324,7 @@ private fun MainScreen(
                     contentPadding = PaddingValues(12.dp, 12.dp, 12.dp, 96.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    items(shown, key = { it.id }) { DownloadCard(it, engine) }
+                    items(shown, key = { it.id }) { DownloadCard(it, engine, requestDelete) }
                 }
             }
         }
@@ -347,7 +358,7 @@ private fun EmptyState(onOpenBrowser: () -> Unit) {
 }
 
 @Composable
-private fun DownloadCard(item: DownloadItem, engine: DownloadEngine) {
+private fun DownloadCard(item: DownloadItem, engine: DownloadEngine, requestDelete: (List<Uri>) -> Unit) {
     val context = LocalContext.current
     var confirm by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
@@ -356,6 +367,7 @@ private fun DownloadCard(item: DownloadItem, engine: DownloadEngine) {
     val torrentSaved = stringResource(R.string.torrent_files_saved)
     val noVideoMsg = stringResource(R.string.no_video_yet)
     val copiedMsg = stringResource(R.string.link_copied)
+    val deletedMsg = stringResource(R.string.deleted_from_phone)
 
     val active = item.status == Status.DOWNLOADING
     Card(
@@ -510,35 +522,94 @@ private fun DownloadCard(item: DownloadItem, engine: DownloadEngine) {
     }
 
     if (confirm) {
-        var alsoFile by remember { mutableStateOf(false) }
+        val hasFiles = item.status == Status.COMPLETED && (item.fileUris.isNotEmpty() || item.finalUri != null)
         AlertDialog(
             onDismissRequest = { confirm = false },
             title = { Text(stringResource(R.string.delete_title)) },
             text = {
                 Column {
                     Text(item.fileName, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    if (item.status == Status.COMPLETED && item.finalUri != null) {
-                        Row(
-                            Modifier.clickable { alsoFile = !alsoFile },
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Checkbox(checked = alsoFile, onCheckedChange = { alsoFile = it })
-                            Text(stringResource(R.string.delete_file_too))
-                        }
+                    if (hasFiles) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            stringResource(R.string.delete_choice_hint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             },
             confirmButton = {
-                TextButton(onClick = {
-                    engine.remove(item.id, alsoFile)
-                    confirm = false
-                }) { Text(stringResource(R.string.delete)) }
+                Row {
+                    if (hasFiles) {
+                        TextButton(onClick = {
+                            engine.remove(item.id, false)
+                            confirm = false
+                        }) { Text(stringResource(R.string.delete_list_only)) }
+                        TextButton(onClick = {
+                            confirm = false
+                            val refused = engine.remove(item.id, true)
+                            if (refused.isEmpty()) Toast.makeText(context, deletedMsg, Toast.LENGTH_SHORT).show()
+                            else requestDelete(refused)
+                        }) { Text(stringResource(R.string.delete_forever), color = MaterialTheme.colorScheme.error) }
+                    } else {
+                        TextButton(onClick = {
+                            engine.remove(item.id, false)
+                            confirm = false
+                        }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+                    }
+                }
             },
             dismissButton = {
                 TextButton(onClick = { confirm = false }) { Text(stringResource(R.string.cancel)) }
             },
         )
     }
+}
+
+/**
+ * Android only lets an app delete files it saved itself. After a reinstall it refuses,
+ * so we show the system "Allow SDM+ to delete?" prompt instead of failing silently.
+ * Lives on the list screen, so it survives the card disappearing.
+ */
+@Composable
+private fun rememberDeleteRequester(engine: DownloadEngine): (List<Uri>) -> Unit {
+    val context = LocalContext.current
+    val doneMsg = stringResource(R.string.deleted_from_phone)
+    val failMsg = stringResource(R.string.delete_failed)
+    var pending by remember { mutableStateOf<List<Uri>>(emptyList()) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { res ->
+        if (res.resultCode == Activity.RESULT_OK) {
+            // Android 10 only grants permission; delete again now that it is allowed.
+            if (Build.VERSION.SDK_INT < 30) engine.deleteFiles(pending)
+            Toast.makeText(context, doneMsg, Toast.LENGTH_SHORT).show()
+        }
+        pending = emptyList()
+    }
+    return { uris ->
+        val sender = deleteSender(context, uris)
+        if (sender != null) {
+            pending = uris
+            launcher.launch(IntentSenderRequest.Builder(sender).build())
+        } else {
+            Toast.makeText(context, failMsg, Toast.LENGTH_LONG).show()
+        }
+    }
+}
+
+private fun deleteSender(context: Context, uris: List<Uri>): IntentSender? = try {
+    if (Build.VERSION.SDK_INT >= 30) {
+        MediaStore.createDeleteRequest(context.contentResolver, uris).intentSender
+    } else {
+        try {
+            context.contentResolver.delete(uris.first(), null, null)
+            null
+        } catch (e: RecoverableSecurityException) {
+            e.userAction.actionIntent.intentSender
+        }
+    }
+} catch (_: Exception) {
+    null
 }
 
 @Composable

@@ -124,4 +124,10 @@
     <string name="adblock_update">حدّث هسه</string>
     <string name="adblock_updated">تحدّثت قائمة الحظر: %1$d موقع</string>
     <string name="adblock_failed">فشل التحديث، تأكد من النت</string>
+    <string name="back_to_app">رجوع للتحميلات</string>
+    <string name="delete_choice_hint">تحذفه من القائمة بس، لو تحذف الملف من الموبايل نهائياً؟</string>
+    <string name="delete_list_only">من القائمة بس</string>
+    <string name="delete_forever">حذف نهائي</string>
+    <string name="deleted_from_phone">انحذف من الموبايل</string>
+    <string name="delete_failed">أندرويد ما سمح بحذف الملف. احذفه من مدير الملفات.</string>
 </resources>

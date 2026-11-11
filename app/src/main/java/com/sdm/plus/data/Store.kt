@@ -55,6 +55,7 @@ class Store(private val file: File) {
         putStr("cookie", i.cookie)
         putStr("referer", i.referer)
         putStr("userAgent", i.userAgent)
+        put("fileUris", JSONArray().apply { i.fileUris.forEach { put(it) } })
         put("sequential", i.sequential)
         put("playlist", i.playlist)
         put("urlChanged", i.urlChanged)
@@ -87,6 +88,8 @@ class Store(private val file: File) {
             cookie = o.str("cookie"),
             referer = o.str("referer"),
             userAgent = o.str("userAgent"),
+            fileUris = o.optJSONArray("fileUris")?.let { a -> (0 until a.length()).map { a.getString(it) } }
+                ?: listOfNotNull(o.str("finalUri")),
             sequential = o.optBoolean("sequential", false),
             playlist = o.optBoolean("playlist", false),
             urlChanged = o.optBoolean("urlChanged", false),

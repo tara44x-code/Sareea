@@ -124,4 +124,10 @@
     <string name="adblock_update">Update now</string>
     <string name="adblock_updated">Block list updated: %1$d sites</string>
     <string name="adblock_failed">Update failed, check your connection</string>
+    <string name="back_to_app">Back to downloads</string>
+    <string name="delete_choice_hint">Remove from the list only, or delete the file from the phone for good?</string>
+    <string name="delete_list_only">List only</string>
+    <string name="delete_forever">Delete for good</string>
+    <string name="deleted_from_phone">Deleted from the phone</string>
+    <string name="delete_failed">Android did not allow deleting the file. Delete it from your file manager.</string>
 </resources>

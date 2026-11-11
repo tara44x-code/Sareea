@@ -18,7 +18,15 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.sdm.plus.model.Status
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -141,6 +149,7 @@ fun BrowserScreen(
     val siteOff = stringResource(R.string.adblock_site_off)
     val siteOn = stringResource(R.string.adblock_site_on)
     val currentFlow by rememberUpdatedState(flow)
+    val allItems by engine.items.collectAsStateWithLifecycle()
 
     // Fresh block list once a day, in the background.
     LaunchedEffect(Unit) {
@@ -272,7 +281,8 @@ fun BrowserScreen(
             }
         },
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).imePadding()) {
+        Box(Modifier.fillMaxSize().padding(padding).imePadding()) {
+        Column(Modifier.fillMaxSize()) {
             if (progress in 1..99) NeonProgress(progress / 100f)
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
@@ -410,6 +420,25 @@ fun BrowserScreen(
                     }
                 },
             )
+        }
+            // Floating button: back to the downloads list (the ← arrow keeps going back in pages).
+            val active = allItems.count { it.status == Status.DOWNLOADING || it.status == Status.QUEUED || it.status == Status.CONNECTING }
+            BadgedBox(
+                badge = { if (active > 0) Badge(containerColor = Neon.Magenta) { Text("$active") } },
+                modifier = Modifier.align(Alignment.BottomStart).padding(16.dp),
+            ) {
+                Box(
+                    Modifier
+                        .size(54.dp)
+                        .shadow(14.dp, CircleShape, ambientColor = Neon.Cyan, spotColor = Neon.Violet)
+                        .clip(CircleShape)
+                        .background(Neon.brush)
+                        .clickable(onClick = onBack),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Filled.CloudDownload, stringResource(R.string.back_to_app), tint = Color.White)
+                }
+            }
         }
     }
 

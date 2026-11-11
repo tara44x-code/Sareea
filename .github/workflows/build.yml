@@ -74,8 +74,8 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.3.${{ github.run_number }}
-          name: SDM+ 2.3 (build ${{ github.run_number }})
+          tag_name: v2.4.${{ github.run_number }}
+          name: SDM+ 2.4 (build ${{ github.run_number }})
           body: |
             Install **SDM-plus-arm64.apk** (works on almost every phone from the last 7 years).
             Use the arm32 file only for very old phones.

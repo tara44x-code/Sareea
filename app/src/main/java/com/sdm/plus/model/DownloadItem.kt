@@ -40,6 +40,8 @@ data class DownloadItem(
     val resumable: Boolean = false,
     val segments: List<Segment> = emptyList(),
     val finalUri: String? = null,
+    // Every file this download saved (torrents and playlists can save many), for permanent delete
+    val fileUris: List<String> = emptyList(),
     // MEDIA: yt-dlp format selector ("mp3:" prefix = convert to mp3) and its label
     val format: String? = null,
     val formatLabel: String? = null,

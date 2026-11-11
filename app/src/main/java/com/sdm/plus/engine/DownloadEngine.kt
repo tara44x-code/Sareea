@@ -206,16 +206,38 @@ class DownloadEngine(
         schedule()
     }
 
-    fun remove(id: String, deleteFile: Boolean) {
-        val item = get(id) ?: return
+    /**
+     * Removes a download. With [deleteFile], every file it saved is deleted from the phone too.
+     * Returns the files Android would not let us delete on our own (e.g. after a reinstall);
+     * the screen then asks the user to allow it.
+     */
+    fun remove(id: String, deleteFile: Boolean): List<Uri> {
+        val item = get(id) ?: return emptyList()
         stopWork(id)
         _items.update { list -> list.filterNot { it.id == id } }
         cleanup(id)
-        if (deleteFile && item.finalUri != null) {
-            runCatching { context.contentResolver.delete(Uri.parse(item.finalUri), null, null) }
-        }
+        val refused = if (deleteFile) deleteFiles(savedUris(item)) else emptyList()
         save()
         schedule()
+        return refused
+    }
+
+    private fun savedUris(item: DownloadItem): List<Uri> =
+        (item.fileUris + listOfNotNull(item.finalUri)).distinct().map { Uri.parse(it) }
+
+    /** Deletes files from shared storage; returns the ones that need the user's permission. */
+    fun deleteFiles(uris: List<Uri>): List<Uri> {
+        val refused = mutableListOf<Uri>()
+        for (u in uris) {
+            try {
+                context.contentResolver.delete(u, null, null)
+            } catch (e: SecurityException) {
+                refused += u
+            } catch (_: Exception) {
+                // Already gone or not ours to touch.
+            }
+        }
+        return refused
     }
 
     fun clearCompleted() {
@@ -443,7 +465,7 @@ class DownloadEngine(
             val cur = get(id) ?: return
             val uri = FileUtils.publish(context, temp, cur.fileName, subFolderFor(cur.category))
             temp.delete()
-            edit(id) { it.copy(status = Status.COMPLETED, finalUri = uri.toString(), autoRetries = 0) }
+            edit(id) { it.copy(status = Status.COMPLETED, finalUri = uri.toString(), fileUris = listOf(uri.toString()), autoRetries = 0) }
         } catch (e: Throwable) {
             r?.let { flush(id, it) }
             throw e
@@ -646,12 +668,14 @@ class DownloadEngine(
         edit(id) { it.copy(status = Status.SAVING, speedBps = 0, peers = 0, seeds = 0) }
         delay(500) // let libtorrent close the files
         var first: Uri? = null
+        val saved = mutableListOf<String>()
         for (i in selection) {
             val path = fs.filePath(i)
             val f = File(dir, path)
             if (!f.exists()) continue
             val folder = "Torrents/" + path.substringBeforeLast('/', "")
             val uri = FileUtils.publish(context, f, fs.fileName(i), folder.trimEnd('/'))
+            saved += uri.toString()
             if (first == null) first = uri
         }
         dir.deleteRecursively()
@@ -660,6 +684,7 @@ class DownloadEngine(
             it.copy(
                 status = Status.COMPLETED,
                 finalUri = if (selection.size == 1) first?.toString() else null,
+                fileUris = saved,
                 autoRetries = 0,
             )
         }
@@ -765,7 +790,7 @@ class DownloadEngine(
             val cur = get(id) ?: return
             val uri = FileUtils.publish(context, out, out.name, subFolderFor(cur.category))
             dir.deleteRecursively()
-            edit(id) { it.copy(status = Status.COMPLETED, finalUri = uri.toString(), autoRetries = 0, playlistPos = null) }
+            edit(id) { it.copy(status = Status.COMPLETED, finalUri = uri.toString(), fileUris = listOf(uri.toString()), autoRetries = 0, playlistPos = null) }
             return
         }
 
@@ -776,13 +801,13 @@ class DownloadEngine(
             it.copy(status = Status.SAVING, speedBps = 0, fileName = listName, totalBytes = total, downloadedBytes = total)
         }
         val cat = FileUtils.categoryOf(outputs.first().name)
-        for (f in outputs.sortedBy { it.name }) {
-            FileUtils.publish(context, f, f.name, listOfNotNull(subFolderFor(cat), listName).joinToString("/"))
+        val saved = outputs.sortedBy { it.name }.map { f ->
+            FileUtils.publish(context, f, f.name, listOfNotNull(subFolderFor(cat), listName).joinToString("/")).toString()
         }
         dir.deleteRecursively()
         edit(id) {
             it.copy(
-                status = Status.COMPLETED, finalUri = null, category = cat,
+                status = Status.COMPLETED, finalUri = null, fileUris = saved, category = cat,
                 playlistPos = "${outputs.size}", autoRetries = 0,
             )
         }
