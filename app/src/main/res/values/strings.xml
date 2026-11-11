@@ -111,4 +111,17 @@
     <string name="set_auto_resume">Resume automatically when the internet returns</string>
     <string name="set_trackers">Faster torrents (add public trackers)</string>
     <string name="set_subtitles">Download Arabic/English subtitles with videos</string>
+    <string name="reload">Reload</string>
+    <string name="media_found">Media on this page (%1$d)</string>
+    <string name="popup_ask">This page wants to open %1$s</string>
+    <string name="popup_open">Open</string>
+    <string name="adblock_site_off">Ad blocker off for %1$s</string>
+    <string name="adblock_site_on">Ad blocker on for %1$s</string>
+    <string name="browser_section">Built-in browser</string>
+    <string name="set_adblock">Block ads and trackers</string>
+    <string name="set_popup">Block pop-ups and pop-unders</string>
+    <string name="adblock_count">Block list: %1$d sites (updates daily)</string>
+    <string name="adblock_update">Update now</string>
+    <string name="adblock_updated">Block list updated: %1$d sites</string>
+    <string name="adblock_failed">Update failed, check your connection</string>
 </resources>

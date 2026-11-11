@@ -111,4 +111,17 @@
     <string name="set_auto_resume">كمّل التحميل وحده من يرجع النت</string>
     <string name="set_trackers">تسريع التورنت (إضافة تراكرات عامة)</string>
     <string name="set_subtitles">حمّل الترجمة العربية/الإنكليزية ويا الفيديو</string>
+    <string name="reload">إعادة تحميل</string>
+    <string name="media_found">ميديا بالصفحة (%1$d)</string>
+    <string name="popup_ask">الصفحة تريد تفتح %1$s</string>
+    <string name="popup_open">افتح</string>
+    <string name="adblock_site_off">مانع الإعلانات طافي لـ %1$s</string>
+    <string name="adblock_site_on">مانع الإعلانات شغّال لـ %1$s</string>
+    <string name="browser_section">المتصفح الداخلي</string>
+    <string name="set_adblock">مانع الإعلانات والمتتبعات</string>
+    <string name="set_popup">منع النوافذ المنبثقة</string>
+    <string name="adblock_count">قائمة الحظر: %1$d موقع (تتحدث كل يوم)</string>
+    <string name="adblock_update">حدّث هسه</string>
+    <string name="adblock_updated">تحدّثت قائمة الحظر: %1$d موقع</string>
+    <string name="adblock_failed">فشل التحديث، تأكد من النت</string>
 </resources>

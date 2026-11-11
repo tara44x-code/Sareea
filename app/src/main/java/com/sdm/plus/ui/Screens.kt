@@ -641,6 +641,12 @@ private fun SettingsScreen(settings: Settings, onBack: () -> Unit) {
     var subs by remember { mutableStateOf(settings.subtitles) }
     var autoResume by remember { mutableStateOf(settings.autoResume) }
     var trackers by remember { mutableStateOf(settings.extraTrackers) }
+    var adBlock by remember { mutableStateOf(settings.adBlock) }
+    var popupBlock by remember { mutableStateOf(settings.popupBlock) }
+    var adCount by remember { mutableIntStateOf(com.sdm.plus.engine.AdBlocker.size) }
+    var adUpdating by remember { mutableStateOf(false) }
+    val adUpdatedMsg = stringResource(R.string.adblock_updated)
+    val adFailedMsg = stringResource(R.string.adblock_failed)
     var engineVersion by remember { mutableStateOf<String?>(null) }
     var updating by remember { mutableStateOf(false) }
     val updatedMsg = stringResource(R.string.engine_updated)
@@ -717,6 +723,33 @@ private fun SettingsScreen(settings: Settings, onBack: () -> Unit) {
             SwitchRow(stringResource(R.string.set_clipboard), clip) { clip = it; settings.watchClipboard = it }
             HorizontalDivider()
 
+            Text(stringResource(R.string.browser_section), style = MaterialTheme.typography.titleSmall, color = Neon.Cyan)
+            SwitchRow(stringResource(R.string.set_adblock), adBlock) { adBlock = it; settings.adBlock = it }
+            SwitchRow(stringResource(R.string.set_popup), popupBlock) { popupBlock = it; settings.popupBlock = it }
+            if (adBlock) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        stringResource(R.string.adblock_count, adCount),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(
+                        enabled = !adUpdating,
+                        onClick = {
+                            adUpdating = true
+                            scope.launch {
+                                val r = withContext(Dispatchers.IO) { runCatching { com.sdm.plus.engine.AdBlocker.refresh(force = true) } }
+                                adUpdating = false
+                                r.onSuccess { n ->
+                                    adCount = n
+                                    Toast.makeText(context, String.format(adUpdatedMsg, n), Toast.LENGTH_SHORT).show()
+                                }.onFailure { Toast.makeText(context, adFailedMsg, Toast.LENGTH_LONG).show() }
+                            }
+                        },
+                    ) { Text(stringResource(R.string.adblock_update)) }
+                }
+            }
             OutlinedTextField(
                 value = home,
                 onValueChange = { home = it; if (it.startsWith("http")) settings.homePage = it.trim() },

@@ -60,4 +60,19 @@ class Settings(context: Context) {
     var extraTrackers: Boolean
         get() = p.getBoolean("extraTrackers", true)
         set(v) = p.edit().putBoolean("extraTrackers", v).apply()
+
+    /** Built-in browser: block ads and trackers. */
+    var adBlock: Boolean
+        get() = p.getBoolean("adBlock", true)
+        set(v) = p.edit().putBoolean("adBlock", v).apply()
+
+    /** Built-in browser: stop pop-ups and pop-unders. */
+    var popupBlock: Boolean
+        get() = p.getBoolean("popupBlock", true)
+        set(v) = p.edit().putBoolean("popupBlock", v).apply()
+
+    /** Sites where the ad blocker is turned off. */
+    var adAllowList: Set<String>
+        get() = p.getStringSet("adAllowList", emptySet())?.toSet() ?: emptySet()
+        set(v) = p.edit().putStringSet("adAllowList", v).apply()
 }
