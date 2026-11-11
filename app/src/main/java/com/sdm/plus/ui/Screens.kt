@@ -862,6 +862,37 @@ private fun SettingsScreen(settings: Settings, onBack: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            HorizontalDivider()
+
+            // About
+            val version = remember {
+                runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: ""
+            }
+            Column(
+                Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    stringResource(R.string.app_name),
+                    style = MaterialTheme.typography.headlineSmall.copy(brush = Neon.brush, fontWeight = FontWeight.Black),
+                )
+                Text(
+                    stringResource(R.string.about_version, version),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stringResource(R.string.about_developer),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    stringResource(R.string.developer_name),
+                    style = MaterialTheme.typography.titleMedium.copy(brush = Neon.brush, fontWeight = FontWeight.Bold),
+                )
+            }
         }
     }
 }

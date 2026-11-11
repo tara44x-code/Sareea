@@ -130,4 +130,7 @@
     <string name="delete_forever">حذف نهائي</string>
     <string name="deleted_from_phone">انحذف من الموبايل</string>
     <string name="delete_failed">أندرويد ما سمح بحذف الملف. احذفه من مدير الملفات.</string>
+    <string name="about_version">الإصدار %1$s</string>
+    <string name="about_developer">المطور</string>
+    <string name="developer_name">مهند سات لنك</string>
 </resources>
