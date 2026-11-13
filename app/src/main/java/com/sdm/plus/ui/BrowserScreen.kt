@@ -85,6 +85,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -145,6 +146,7 @@ fun BrowserScreen(
     var blockedOnPage by remember { mutableIntStateOf(0) }
     var capture by remember { mutableStateOf<Capture?>(null) }
     val media = remember { mutableStateListOf<String>() }
+    val mediaReferers = remember { java.util.concurrent.ConcurrentHashMap<String, String>() }
     val blockedCounter = remember { AtomicInteger(0) }
 
     val caughtMsg = stringResource(R.string.catch_started)
@@ -159,6 +161,27 @@ fun BrowserScreen(
     // Fresh block list once a day, in the background.
     LaunchedEffect(Unit) {
         if (appSettings.adBlock) withContext(Dispatchers.IO) { runCatching { AdBlocker.refresh() } }
+    }
+
+    fun startCapture() {
+        val w = webView ?: return
+        capture = Capture.Loading
+        val pu = pageUrl
+        val title = pageTitle
+        val sniffed = media.toList()
+        val refs = HashMap(mediaReferers)
+        val ua = w.settings.userAgentString
+        w.evaluateJavascript(VideoCapture.DOM_JS) { json ->
+            val dom = VideoCapture.parseDom(json)
+            val frames = VideoCapture.parseIframes(json)
+            val cookie = CookieManager.getInstance().getCookie(pu)
+            scope.launch {
+                val list = withContext(Dispatchers.IO) {
+                    runCatching { VideoCapture.analyze(context, pu, sniffed, dom, cookie, ua, frames, refs) }.getOrDefault(emptyList())
+                }
+                if (capture == Capture.Loading) capture = Capture.Result(pu, title, ua, list, refs)
+            }
+        }
     }
 
     fun hostOf(url: String?) = runCatching { Uri.parse(url).host?.lowercase()?.removePrefix("www.") }.getOrNull()
@@ -269,35 +292,6 @@ fun BrowserScreen(
                 },
             )
         },
-        floatingActionButton = {
-            if (pageUrl.startsWith("http")) {
-                NeonButton(
-                    if (media.isEmpty()) stringResource(R.string.capture_video)
-                    else stringResource(R.string.capture_video_n, media.size),
-                    Icons.Filled.Download,
-                    {
-                        val w = webView
-                        if (w != null) {
-                            capture = Capture.Loading
-                            val pu = pageUrl
-                            val title = pageTitle
-                            val sniffed = media.toList()
-                            val ua = w.settings.userAgentString
-                            w.evaluateJavascript(VideoCapture.DOM_JS) { json ->
-                                val dom = VideoCapture.parseDom(json)
-                                val cookie = CookieManager.getInstance().getCookie(pu)
-                                scope.launch {
-                                    val list = withContext(Dispatchers.IO) {
-                                        runCatching { VideoCapture.analyze(context, pu, sniffed, dom, cookie, ua) }.getOrDefault(emptyList())
-                                    }
-                                    if (capture == Capture.Loading) capture = Capture.Result(pu, title, ua, list)
-                                }
-                            }
-                        }
-                    },
-                )
-            }
-        },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding).imePadding()) {
         Column(Modifier.fillMaxSize()) {
@@ -329,6 +323,9 @@ fun BrowserScreen(
                                 }
                                 // 2) Media sniffer: remember video/audio the page loads.
                                 if (isMediaUrl(url) && !AdBlocker.isAd(host)) {
+                                    // Keep the referer the player used: video servers check it.
+                                    (request.requestHeaders["Referer"] ?: request.requestHeaders["referer"])
+                                        ?.let { mediaReferers[url] = it }
                                     main.post { if (url !in media && media.size < 40) media.add(url) }
                                 }
                                 return null
@@ -432,6 +429,25 @@ fun BrowserScreen(
                 },
             )
         }
+            // Small round "capture video" button; the number = media files the page has loaded.
+            if (pageUrl.startsWith("http")) {
+                BadgedBox(
+                    badge = { if (media.isNotEmpty()) Badge(containerColor = Neon.Cyan, contentColor = Neon.Night) { Text("${media.size}") } },
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .size(54.dp)
+                            .shadow(14.dp, CircleShape, ambientColor = Neon.Magenta, spotColor = Neon.Magenta)
+                            .clip(CircleShape)
+                            .background(Brush.linearGradient(listOf(Neon.Magenta, Neon.Violet)))
+                            .clickable { startCapture() },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(Icons.Filled.Download, stringResource(R.string.capture_video), tint = Color.White)
+                    }
+                }
+            }
             // Floating button: back to the downloads list (the ← arrow keeps going back in pages).
             val active = allItems.count { it.status == Status.DOWNLOADING || it.status == Status.QUEUED || it.status == Status.CONNECTING }
             BadgedBox(
@@ -473,15 +489,15 @@ fun BrowserScreen(
             when (f.source) {
                 VideoCapture.Source.PAGE -> {
                     val name = title?.let { t -> t.take(80).replace(Regex("[\\\\/:*?\"<>|]"), "_").trim() + "." + f.ext.lowercase() }
-                    engine.addHttp(f.url, name, CookieManager.getInstance().getCookie(f.url), c.pageUrl, c.userAgent)
+                    engine.addHttp(f.url, name, CookieManager.getInstance().getCookie(f.url), f.referer ?: c.referers[f.url] ?: c.pageUrl, c.userAgent)
                 }
                 VideoCapture.Source.STREAM -> engine.addMedia(
                     f.url, MediaSupport.BEST, qualityText(f.quality, f.label), title,
-                    cookie = CookieManager.getInstance().getCookie(f.url), referer = c.pageUrl, userAgent = c.userAgent,
+                    cookie = CookieManager.getInstance().getCookie(f.url), referer = f.referer ?: c.referers[f.url] ?: c.pageUrl, userAgent = c.userAgent,
                 )
                 VideoCapture.Source.SITE -> engine.addMedia(
-                    c.pageUrl, f.ytFormat ?: MediaSupport.BEST, f.label ?: "BEST", title,
-                    cookie = CookieManager.getInstance().getCookie(c.pageUrl), referer = c.pageUrl, userAgent = c.userAgent,
+                    f.url, f.ytFormat ?: MediaSupport.BEST, f.label ?: "BEST", title,
+                    cookie = CookieManager.getInstance().getCookie(f.url), referer = c.pageUrl, userAgent = c.userAgent,
                 )
             }
             Toast.makeText(context, String.format(caughtMsg, title ?: FileUtils.nameFrom(null, f.url, null)), Toast.LENGTH_SHORT).show()
@@ -491,7 +507,10 @@ fun BrowserScreen(
 
 private sealed interface Capture {
     data object Loading : Capture
-    data class Result(val pageUrl: String, val title: String, val userAgent: String?, val found: List<VideoCapture.Found>) : Capture
+    data class Result(
+        val pageUrl: String, val title: String, val userAgent: String?,
+        val found: List<VideoCapture.Found>, val referers: Map<String, String>,
+    ) : Capture
 }
 
 private fun qualityText(q: Int, label: String?): String = when {
@@ -580,7 +599,8 @@ private fun extOf(url: String): String =
 
 private fun isStreamUrl(url: String): Boolean = extOf(url) == "m3u8" || extOf(url) == "mpd"
 
-private fun isMediaUrl(url: String): Boolean = url.startsWith("http") && extOf(url) in mediaExt
+private fun isMediaUrl(url: String): Boolean =
+    url.startsWith("http") && (extOf(url) in mediaExt || url.contains(".m3u8", true) || url.contains(".mpd?", true))
 
 private const val GRAB_JS = """
 (function(){

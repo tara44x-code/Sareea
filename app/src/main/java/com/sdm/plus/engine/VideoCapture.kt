@@ -3,6 +3,7 @@ package com.sdm.plus.engine
 import android.content.Context
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -30,6 +31,7 @@ object VideoCapture {
         val source: Source,
         val ytFormat: String? = null,
         val label: String? = null,
+        val referer: String? = null, // what the video server expects; null = the page
     )
 
     data class DomVideo(val src: String, val width: Int, val height: Int, val duration: Double)
@@ -45,6 +47,11 @@ object VideoCapture {
       r.push({src: s || '', w: v.videoWidth || 0, h: v.videoHeight || 0, d: isFinite(v.duration) ? v.duration : 0});
     });
   });
+  // Video players that live on another server sit inside an iframe.
+  document.querySelectorAll('iframe[src]').forEach(function(f){
+    var b = f.getBoundingClientRect();
+    if (b.width >= 200 && b.height >= 120) r.push({iframe: f.src});
+  });
   return r;
 })()
 """
@@ -54,8 +61,17 @@ object VideoCapture {
         val arr = runCatching { JSONArray(json) }.getOrNull() ?: return emptyList()
         return (0 until arr.length()).mapNotNull { i ->
             val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            if (o.has("iframe")) return@mapNotNull null
             DomVideo(o.optString("src"), o.optInt("w"), o.optInt("h"), o.optDouble("d", 0.0))
         }
+    }
+
+    /** Player iframes on the page (embedded video servers). */
+    fun parseIframes(json: String?): List<String> {
+        if (json.isNullOrBlank() || json == "null") return emptyList()
+        val arr = runCatching { JSONArray(json) }.getOrNull() ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i -> arr.optJSONObject(i)?.optString("iframe")?.takeIf { it.startsWith("http") } }
+            .distinct()
     }
 
     private val client = OkHttpClient.Builder()
@@ -71,6 +87,8 @@ object VideoCapture {
         dom: List<DomVideo>,
         cookie: String?,
         userAgent: String?,
+        iframes: List<String> = emptyList(),
+        referers: Map<String, String> = emptyMap(),
     ): List<Found> = coroutineScope {
         val duration = dom.maxOfOrNull { it.duration }?.takeIf { it > 0 } ?: 0.0
         val domByUrl = dom.filter { it.src.startsWith("http") }.associateBy { it.src }
@@ -82,23 +100,31 @@ object VideoCapture {
             .distinct()
             .take(25)
 
-        // The site extractor runs alongside (max 25 s).
-        val site = async {
-            withTimeoutOrNull(25_000) {
-                runCatching { MediaSupport.fetch(ctx, pageUrl) }.getOrNull()
+        // The site extractor runs alongside (max 25 s), on the page and on embedded players.
+        val sites = (listOf(pageUrl) + iframes.filter { !AdBlocker.isAd(java.net.URI(it).host) }.take(3)).map { u ->
+            async {
+                u to withTimeoutOrNull(25_000) { runInterruptible { runCatching { MediaSupport.fetch(ctx, u) }.getOrNull() } }
             }
         }
 
         val direct = candidates.map { u ->
             async {
+                // Video servers often accept requests only from their own player: use the referer it used.
+                val ref = referers[u] ?: pageUrl
                 runCatching {
-                    if (isStream(u)) streamQualities(u, cookie, userAgent, pageUrl, duration, playing)
-                    else listOfNotNull(fileInfo(u, cookie, userAgent, pageUrl, domByUrl[u], playing))
-                }.getOrDefault(emptyList())
+                    if (isStream(u)) streamQualities(u, cookie, userAgent, ref, duration, playing)
+                    else listOfNotNull(fileInfo(u, cookie, userAgent, ref, domByUrl[u], playing))
+                }.map { list -> list.map { it.copy(referer = ref) } }.getOrElse {
+                    // Could not inspect it, but it is still a real media file: list it anyway.
+                    listOf(Found(guessQuality(u, domByUrl[u], playing), if (isStream(u)) "MP4" else extOf(u).uppercase().ifEmpty { "MP4" }, 0, false, u, if (isStream(u)) Source.STREAM else Source.PAGE, referer = ref))
+                }
             }
         }.flatMap { it.await() }
 
-        val fromSite = site.await()?.choices.orEmpty().map { c ->
+        val fromSite = sites.flatMap { d ->
+            val (siteUrl, meta) = d.await()
+            meta?.choices.orEmpty().map { c -> siteUrl to c }
+        }.map { (siteUrl, c) ->
             val q = when (c.label) {
                 "BEST" -> Int.MAX_VALUE
                 "M4A", "MP3" -> -1
@@ -106,14 +132,14 @@ object VideoCapture {
                 "2K" -> 1440
                 else -> c.label.removeSuffix("p").toIntOrNull() ?: 0
             }
-            Found(q, c.ext, c.sizeEstimate, true, pageUrl, Source.SITE, c.format, c.label)
+            Found(q, c.ext, c.sizeEstimate, true, siteUrl, Source.SITE, c.format, c.label)
         }
 
         (direct.distinctBy { it.url } + fromSite)
             .sortedWith(compareByDescending<Found> { if (it.quality == Int.MAX_VALUE) 100_000 else it.quality }.thenByDescending { it.size })
     }
 
-    private fun isStream(u: String) = extOf(u) in setOf("m3u8", "mpd")
+    private fun isStream(u: String) = extOf(u) in setOf("m3u8", "mpd") || u.contains(".m3u8", true)
 
     fun extOf(url: String): String =
         url.substringBefore('?').substringBefore('#').substringAfterLast('/').substringAfterLast('.', "").lowercase()
@@ -130,32 +156,39 @@ object VideoCapture {
     private fun fileInfo(u: String, cookie: String?, ua: String?, referer: String, dom: DomVideo?, playing: DomVideo?): Found? {
         val req = request(u, cookie, ua, referer).header("Range", "bytes=0-0").build()
         client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) return null
+            if (!resp.isSuccessful) {
+                // Server refused us, but the player got it: keep it with unknown size.
+                return Found(guessQuality(u, dom, playing), extOf(u).uppercase().ifEmpty { "MP4" }, 0, false, u, Source.PAGE)
+            }
             val type = resp.header("Content-Type").orEmpty().lowercase()
-            if (type.startsWith("text/") || type.contains("json")) return null
+            if (type.startsWith("text/html") || type.contains("json")) return null
             val size = resp.header("Content-Range")?.substringAfterLast('/')?.toLongOrNull()
                 ?: resp.body?.contentLength()?.takeIf { it > 1 } ?: 0L
             // Tiny files are thumbnails/previews, not the video.
             if (size in 1..150_000) return null
             val ext = extOf(u).ifEmpty { type.substringAfter('/').substringBefore(';') }.uppercase()
             val audio = type.startsWith("audio/") || ext in setOf("MP3", "M4A", "AAC", "OGG", "OPUS", "FLAC")
-            val q = when {
-                audio -> -1
-                dom != null && dom.width > 0 -> minOf(dom.width, dom.height)
-                else -> qualityInUrl.find(u)?.groupValues?.get(1)?.toIntOrNull()
-                    ?: playing?.let { minOf(it.width, it.height) } ?: 0
-            }
+            val q = if (audio) -1 else guessQuality(u, dom, playing)
             return Found(q, ext.ifEmpty { "MP4" }, size, false, u, Source.PAGE)
         }
+    }
+
+    private fun guessQuality(u: String, dom: DomVideo?, playing: DomVideo?): Int = when {
+        dom != null && dom.width > 0 -> minOf(dom.width, dom.height)
+        else -> qualityInUrl.find(u)?.groupValues?.get(1)?.toIntOrNull()
+            ?: playing?.takeIf { it.width > 0 }?.let { minOf(it.width, it.height) } ?: 0
     }
 
     /** Every quality inside an HLS master playlist, with size from bitrate × length. */
     private fun streamQualities(u: String, cookie: String?, ua: String?, referer: String, domDuration: Double, playing: DomVideo?): List<Found> {
         if (extOf(u) == "mpd") return listOf(Found(playing?.let { minOf(it.width, it.height) } ?: 0, "MP4", 0, true, u, Source.STREAM))
         val text = client.newCall(request(u, cookie, ua, referer).build()).execute().use { it.body?.string().orEmpty() }
-        if (!text.startsWith("#EXTM3U")) return emptyList()
+        val clean = text.trimStart('\uFEFF', ' ', '\n', '\r', '\t')
+        if (!clean.startsWith("#EXTM3U") && !clean.contains("#EXTINF") && !clean.contains("#EXT-X-STREAM-INF")) {
+            return listOf(Found(guessQuality(u, null, playing), "MP4", 0, true, u, Source.STREAM))
+        }
         val base = URI(u)
-        val lines = text.lines()
+        val lines = clean.lines()
         val variants = mutableListOf<Found>()
         var duration = domDuration
         if (lines.none { it.startsWith("#EXT-X-STREAM-INF") }) {
