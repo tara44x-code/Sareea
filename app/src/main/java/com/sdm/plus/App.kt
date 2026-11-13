@@ -24,7 +24,11 @@ class App : Application() {
         settings = Settings(this)
         TorrentSupport.init(this)
         com.sdm.plus.engine.AdBlocker.init(this)
-        Thread { com.sdm.plus.engine.AdBlocker.loadCached() }.start()
+        com.sdm.plus.engine.FilterEngine.init(this)
+        Thread {
+            com.sdm.plus.engine.AdBlocker.loadCached()
+            com.sdm.plus.engine.FilterEngine.load()
+        }.start()
         engine = DownloadEngine(this, Store(File(filesDir, "downloads.json")), settings) {
             DownloadService.ensureRunning(this)
         }

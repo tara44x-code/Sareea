@@ -717,7 +717,7 @@ private fun SettingsScreen(settings: Settings, onBack: () -> Unit) {
     var trackers by remember { mutableStateOf(settings.extraTrackers) }
     var adBlock by remember { mutableStateOf(settings.adBlock) }
     var popupBlock by remember { mutableStateOf(settings.popupBlock) }
-    var adCount by remember { mutableIntStateOf(com.sdm.plus.engine.AdBlocker.size) }
+    var adCount by remember { mutableIntStateOf(com.sdm.plus.engine.AdBlocker.size + com.sdm.plus.engine.FilterEngine.ruleCount) }
     var adUpdating by remember { mutableStateOf(false) }
     val adUpdatedMsg = stringResource(R.string.adblock_updated)
     val adFailedMsg = stringResource(R.string.adblock_failed)
@@ -804,7 +804,7 @@ private fun SettingsScreen(settings: Settings, onBack: () -> Unit) {
             if (adBlock) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        stringResource(R.string.adblock_count, adCount),
+                        stringResource(R.string.adblock_count, adCount) + "\n" + stringResource(R.string.adblock_lists),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
@@ -814,7 +814,7 @@ private fun SettingsScreen(settings: Settings, onBack: () -> Unit) {
                         onClick = {
                             adUpdating = true
                             scope.launch {
-                                val r = withContext(Dispatchers.IO) { runCatching { com.sdm.plus.engine.AdBlocker.refresh(force = true) } }
+                                val r = withContext(Dispatchers.IO) { runCatching { com.sdm.plus.engine.AdBlocker.refreshAll(force = true) } }
                                 adUpdating = false
                                 r.onSuccess { n ->
                                     adCount = n

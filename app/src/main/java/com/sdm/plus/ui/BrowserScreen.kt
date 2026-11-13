@@ -98,6 +98,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.sdm.plus.R
 import com.sdm.plus.data.Settings
 import com.sdm.plus.engine.AdBlocker
+import com.sdm.plus.engine.FilterEngine
 import com.sdm.plus.engine.DownloadEngine
 import com.sdm.plus.engine.FileUtils
 import com.sdm.plus.engine.MediaSupport
@@ -160,7 +161,7 @@ fun BrowserScreen(
 
     // Fresh block list once a day, in the background.
     LaunchedEffect(Unit) {
-        if (appSettings.adBlock) withContext(Dispatchers.IO) { runCatching { AdBlocker.refresh() } }
+        if (appSettings.adBlock) withContext(Dispatchers.IO) { runCatching { AdBlocker.refreshAll() } }
     }
 
     fun startCapture() {
@@ -316,7 +317,10 @@ fun BrowserScreen(
                                 val url = request.url.toString()
                                 val host = request.url.host
                                 // 1) Ads and trackers: answer with nothing.
-                                if (!request.isForMainFrame && blockerOn() && AdBlocker.isAd(host)) {
+                                val ph = hostOf(pageUrl)
+                                if (!request.isForMainFrame && blockerOn() &&
+                                    ((AdBlocker.isAd(host) && !FilterEngine.isAllowed(url, host, ph)) || FilterEngine.shouldBlock(url, host, ph))
+                                ) {
                                     val n = blockedCounter.incrementAndGet()
                                     main.post { blockedOnPage = n }
                                     return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
@@ -368,7 +372,10 @@ fun BrowserScreen(
                                 address = url
                                 pageUrl = url
                                 pageTitle = view.title.orEmpty()
-                                if (blockerOn()) view.evaluateJavascript(AdBlocker.COSMETIC_JS, null)
+                                if (blockerOn()) {
+                                    view.evaluateJavascript(AdBlocker.COSMETIC_JS, null)
+                                    FilterEngine.cosmeticJs(hostOf(url)).forEach { view.evaluateJavascript(it, null) }
+                                }
                             }
                         }
                         webChromeClient = object : WebChromeClient() {

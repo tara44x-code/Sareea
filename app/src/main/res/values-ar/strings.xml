@@ -120,9 +120,9 @@
     <string name="browser_section">المتصفح الداخلي</string>
     <string name="set_adblock">مانع الإعلانات والمتتبعات</string>
     <string name="set_popup">منع النوافذ المنبثقة</string>
-    <string name="adblock_count">قائمة الحظر: %1$d موقع (تتحدث كل يوم)</string>
+    <string name="adblock_count">قواعد الحظر: %1$d (تتحدث كل يوم)</string>
     <string name="adblock_update">حدّث هسه</string>
-    <string name="adblock_updated">تحدّثت قائمة الحظر: %1$d موقع</string>
+    <string name="adblock_updated">تحدّثت قواعد الحظر: %1$d</string>
     <string name="adblock_failed">فشل التحديث، تأكد من النت</string>
     <string name="back_to_app">رجوع للتحميلات</string>
     <string name="delete_choice_hint">تحذفه من القائمة بس، لو تحذف الملف من الموبايل نهائياً؟</string>
@@ -143,4 +143,5 @@
     <string name="capture_src_stream">بث</string>
     <string name="capture_src_site">من الموقع</string>
     <string name="quality_unknown">جودة غير معروفة</string>
+    <string name="adblock_lists">قوائم uBlock Origin: EasyList و uBlock filters و uBlock badware و Liste AR (العربية) + StevenBlack</string>
 </resources>

@@ -51,7 +51,16 @@ object AdBlocker {
         }
     }
 
-    /** Downloads a fresh list once a day (or now if [force]). Returns the number of domains. */
+    /** Updates everything: uBlock filter lists + hosts list. Returns total rules. */
+    fun refreshAll(force: Boolean = false): Int {
+        var error: Throwable? = null
+        runCatching { FilterEngine.refresh(force) }.onFailure { error = it }
+        runCatching { refresh(force) }.onFailure { if (error != null) throw it }
+        if (FilterEngine.ruleCount == 0 && error != null) throw error!!
+        return FilterEngine.ruleCount + size
+    }
+
+    /** Downloads a fresh hosts list once a day (or now if [force]). Returns the number of domains. */
     fun refresh(force: Boolean = false): Int {
         if (!::listFile.isInitialized) return size
         if (!force && listFile.exists() && System.currentTimeMillis() - listFile.lastModified() < 24L * 3600 * 1000) {
@@ -81,6 +90,7 @@ object AdBlocker {
     /** True if [host] or any parent domain is on the list. */
     fun isAd(host: String?): Boolean {
         if (host.isNullOrEmpty()) return false
+        if (FilterEngine.isBlockedDomain(host)) return true
         var h = host.lowercase().removePrefix("www.")
         val set = hosts
         while (true) {

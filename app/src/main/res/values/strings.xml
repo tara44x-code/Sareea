@@ -120,9 +120,9 @@
     <string name="browser_section">Built-in browser</string>
     <string name="set_adblock">Block ads and trackers</string>
     <string name="set_popup">Block pop-ups and pop-unders</string>
-    <string name="adblock_count">Block list: %1$d sites (updates daily)</string>
+    <string name="adblock_count">Filter rules: %1$d (updated daily)</string>
     <string name="adblock_update">Update now</string>
-    <string name="adblock_updated">Block list updated: %1$d sites</string>
+    <string name="adblock_updated">Filter rules updated: %1$d</string>
     <string name="adblock_failed">Update failed, check your connection</string>
     <string name="back_to_app">Back to downloads</string>
     <string name="delete_choice_hint">Remove from the list only, or delete the file from the phone for good?</string>
@@ -143,4 +143,5 @@
     <string name="capture_src_stream">Stream</string>
     <string name="capture_src_site">From the site</string>
     <string name="quality_unknown">Unknown quality</string>
+    <string name="adblock_lists">uBlock Origin lists: EasyList, uBlock filters, uBlock badware, Liste AR + StevenBlack</string>
 </resources>
