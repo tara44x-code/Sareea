@@ -133,4 +133,14 @@
     <string name="about_version">Version %1$s</string>
     <string name="about_developer">Developer</string>
     <string name="developer_name">Muhannad Sat Link</string>
+    <string name="set_engine_auto">Update the video engine automatically (daily)</string>
+    <string name="capture_video">Capture video</string>
+    <string name="capture_video_n">Capture video (%1$d)</string>
+    <string name="capture_searching">Looking for the video on this page…</string>
+    <string name="capture_title">Videos on this page</string>
+    <string name="capture_none">No video found. Play the video on the page first, then tap Capture again.</string>
+    <string name="capture_src_page">File on the page</string>
+    <string name="capture_src_stream">Stream</string>
+    <string name="capture_src_site">From the site</string>
+    <string name="quality_unknown">Unknown quality</string>
 </resources>

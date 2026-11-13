@@ -38,7 +38,7 @@ object MediaSupport {
     /** Sites change often; keep yt-dlp fresh (at most once a day unless [force]). */
     fun updateIfDue(ctx: Context, settings: Settings, force: Boolean = false): String? {
         val now = System.currentTimeMillis()
-        if (!force && now - settings.lastEngineUpdate < 24L * 3600 * 1000) return null
+        if (!force && (!settings.autoUpdateEngine || now - settings.lastEngineUpdate < 24L * 3600 * 1000)) return null
         ensureInit(ctx)
         return try {
             YoutubeDL.getInstance().updateYoutubeDL(ctx.applicationContext, YoutubeDL.UpdateChannel.STABLE)

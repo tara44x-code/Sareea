@@ -133,4 +133,14 @@
     <string name="about_version">الإصدار %1$s</string>
     <string name="about_developer">المطور</string>
     <string name="developer_name">مهند سات لنك</string>
+    <string name="set_engine_auto">حدّث محرك الفيديو تلقائياً (كل يوم)</string>
+    <string name="capture_video">التقط الفيديو</string>
+    <string name="capture_video_n">التقط الفيديو (%1$d)</string>
+    <string name="capture_searching">جاري البحث عن الفيديو بالصفحة…</string>
+    <string name="capture_title">الفيديوهات بالصفحة</string>
+    <string name="capture_none">ما لقيت فيديو. شغّل الفيديو بالصفحة أول، وبعدين اضغط «التقط الفيديو» مرة ثانية.</string>
+    <string name="capture_src_page">ملف من الصفحة</string>
+    <string name="capture_src_stream">بث</string>
+    <string name="capture_src_site">من الموقع</string>
+    <string name="quality_unknown">جودة غير معروفة</string>
 </resources>

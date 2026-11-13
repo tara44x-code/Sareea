@@ -75,4 +75,9 @@ class Settings(context: Context) {
     var adAllowList: Set<String>
         get() = p.getStringSet("adAllowList", emptySet())?.toSet() ?: emptySet()
         set(v) = p.edit().putStringSet("adAllowList", v).apply()
+
+    /** Update yt-dlp automatically once a day. */
+    var autoUpdateEngine: Boolean
+        get() = p.getBoolean("autoUpdateEngine", true)
+        set(v) = p.edit().putBoolean("autoUpdateEngine", v).apply()
 }

@@ -138,8 +138,16 @@ class DownloadEngine(
         )
     }
 
-    fun addMedia(url: String, format: String, label: String, title: String?, playlist: Boolean = false) {
-        append(listOf(newMedia(url, System.currentTimeMillis(), format, label, title).copy(playlist = playlist)))
+    fun addMedia(
+        url: String, format: String, label: String, title: String?, playlist: Boolean = false,
+        cookie: String? = null, referer: String? = null, userAgent: String? = null,
+    ) {
+        append(
+            listOf(
+                newMedia(url, System.currentTimeMillis(), format, label, title)
+                    .copy(playlist = playlist, cookie = cookie, referer = referer, userAgent = userAgent)
+            )
+        )
     }
 
     /** [torrentBytes] = already-fetched metadata (from the picker); null = fetch when it starts. */
@@ -742,6 +750,7 @@ class DownloadEngine(
             }
         }
         item.cookie?.takeIf { it.isNotBlank() }?.let { req.addOption("--add-header", "Cookie:$it") }
+        item.referer?.takeIf { it.isNotBlank() }?.let { req.addOption("--referer", it) }
         item.userAgent?.let { req.addOption("--user-agent", it) }
         val limit = settings.speedLimitKBps
         if (limit > 0) req.addOption("-r", "${limit}K")

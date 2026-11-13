@@ -723,6 +723,7 @@ private fun SettingsScreen(settings: Settings, onBack: () -> Unit) {
     val adFailedMsg = stringResource(R.string.adblock_failed)
     var engineVersion by remember { mutableStateOf<String?>(null) }
     var updating by remember { mutableStateOf(false) }
+    var autoEngine by remember { mutableStateOf(settings.autoUpdateEngine) }
     val updatedMsg = stringResource(R.string.engine_updated)
     val failedMsg = stringResource(R.string.engine_update_failed)
 
@@ -840,6 +841,7 @@ private fun SettingsScreen(settings: Settings, onBack: () -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            SwitchRow(stringResource(R.string.set_engine_auto), autoEngine) { autoEngine = it; settings.autoUpdateEngine = it }
             Button(
                 enabled = !updating,
                 onClick = {

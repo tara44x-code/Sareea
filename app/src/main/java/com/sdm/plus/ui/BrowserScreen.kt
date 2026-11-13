@@ -101,6 +101,11 @@ import com.sdm.plus.engine.DownloadEngine
 import com.sdm.plus.engine.FileUtils
 import com.sdm.plus.engine.MediaSupport
 import com.sdm.plus.engine.TorrentSupport
+import com.sdm.plus.engine.VideoCapture
+import android.text.format.Formatter
+import androidx.compose.foundation.border
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.MusicNote
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -138,7 +143,7 @@ fun BrowserScreen(
     var pageUrl by remember { mutableStateOf("") }
     var pageTitle by remember { mutableStateOf("") }
     var blockedOnPage by remember { mutableIntStateOf(0) }
-    var showMedia by remember { mutableStateOf(false) }
+    var capture by remember { mutableStateOf<Capture?>(null) }
     val media = remember { mutableStateListOf<String>() }
     val blockedCounter = remember { AtomicInteger(0) }
 
@@ -265,18 +270,31 @@ fun BrowserScreen(
             )
         },
         floatingActionButton = {
-            when {
-                // Video sites: one tap to pick a quality.
-                MediaSupport.isMediaSite(pageUrl) -> NeonButton(
-                    stringResource(R.string.download_video),
+            if (pageUrl.startsWith("http")) {
+                NeonButton(
+                    if (media.isEmpty()) stringResource(R.string.capture_video)
+                    else stringResource(R.string.capture_video_n, media.size),
                     Icons.Filled.Download,
-                    { currentFlow.submit(listOf(pageUrl), forceMedia = true) },
-                )
-                // Any other site that played a video/audio file: list what was found.
-                media.isNotEmpty() -> NeonButton(
-                    stringResource(R.string.media_found, media.size),
-                    Icons.Filled.Movie,
-                    { showMedia = true },
+                    {
+                        val w = webView
+                        if (w != null) {
+                            capture = Capture.Loading
+                            val pu = pageUrl
+                            val title = pageTitle
+                            val sniffed = media.toList()
+                            val ua = w.settings.userAgentString
+                            w.evaluateJavascript(VideoCapture.DOM_JS) { json ->
+                                val dom = VideoCapture.parseDom(json)
+                                val cookie = CookieManager.getInstance().getCookie(pu)
+                                scope.launch {
+                                    val list = withContext(Dispatchers.IO) {
+                                        runCatching { VideoCapture.analyze(context, pu, sniffed, dom, cookie, ua) }.getOrDefault(emptyList())
+                                    }
+                                    if (capture == Capture.Loading) capture = Capture.Result(pu, title, ua, list)
+                                }
+                            }
+                        }
+                    },
                 )
             }
         },
@@ -435,53 +453,118 @@ fun BrowserScreen(
         }
     }
 
-    if (showMedia) {
-        MediaFoundDialog(
-            urls = media.toList(),
-            onDismiss = { showMedia = false },
-            onPick = { url ->
-                showMedia = false
-                val ua = webView?.settings?.userAgentString
-                if (isStreamUrl(url)) {
-                    // HLS/DASH streams are stitched together by yt-dlp + ffmpeg.
-                    engine.addMedia(url, MediaSupport.BEST, "BEST", pageTitle.ifBlank { null })
-                } else {
-                    engine.addHttp(url, null, CookieManager.getInstance().getCookie(url), pageUrl, ua)
+    when (val c = capture) {
+        null -> {}
+        Capture.Loading -> AlertDialog(
+            onDismissRequest = { capture = null },
+            text = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.material3.CircularProgressIndicator(Modifier.size(28.dp), color = Neon.Cyan)
+                    Spacer(Modifier.width(16.dp))
+                    Text(stringResource(R.string.capture_searching))
                 }
-                Toast.makeText(context, String.format(caughtMsg, FileUtils.nameFrom(null, url, null)), Toast.LENGTH_SHORT).show()
             },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { capture = null }) { Text(stringResource(R.string.cancel)) } },
         )
+        is Capture.Result -> CaptureDialog(c.found, onDismiss = { capture = null }) { f ->
+            capture = null
+            val title = c.title.ifBlank { null }
+            when (f.source) {
+                VideoCapture.Source.PAGE -> {
+                    val name = title?.let { t -> t.take(80).replace(Regex("[\\\\/:*?\"<>|]"), "_").trim() + "." + f.ext.lowercase() }
+                    engine.addHttp(f.url, name, CookieManager.getInstance().getCookie(f.url), c.pageUrl, c.userAgent)
+                }
+                VideoCapture.Source.STREAM -> engine.addMedia(
+                    f.url, MediaSupport.BEST, qualityText(f.quality, f.label), title,
+                    cookie = CookieManager.getInstance().getCookie(f.url), referer = c.pageUrl, userAgent = c.userAgent,
+                )
+                VideoCapture.Source.SITE -> engine.addMedia(
+                    c.pageUrl, f.ytFormat ?: MediaSupport.BEST, f.label ?: "BEST", title,
+                    cookie = CookieManager.getInstance().getCookie(c.pageUrl), referer = c.pageUrl, userAgent = c.userAgent,
+                )
+            }
+            Toast.makeText(context, String.format(caughtMsg, title ?: FileUtils.nameFrom(null, f.url, null)), Toast.LENGTH_SHORT).show()
+        }
     }
 }
 
+private sealed interface Capture {
+    data object Loading : Capture
+    data class Result(val pageUrl: String, val title: String, val userAgent: String?, val found: List<VideoCapture.Found>) : Capture
+}
+
+private fun qualityText(q: Int, label: String?): String = when {
+    label != null && q == 0 -> label
+    q == Int.MAX_VALUE -> "BEST"
+    q < 0 -> "M4A"
+    q >= 2160 -> "4K"
+    q >= 1440 -> "2K"
+    q > 0 -> "${q}p"
+    else -> "?"
+}
+
 @Composable
-private fun MediaFoundDialog(urls: List<String>, onDismiss: () -> Unit, onPick: (String) -> Unit) {
+private fun CaptureDialog(found: List<VideoCapture.Found>, onDismiss: () -> Unit, onPick: (VideoCapture.Found) -> Unit) {
+    val ctx = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.media_found, urls.size)) },
+        title = { Text(stringResource(R.string.capture_title)) },
         text = {
-            LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                items(urls) { u ->
-                    Row(
-                        Modifier.fillMaxWidth().clickable { onPick(u) }.padding(vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(Icons.Filled.Movie, null, tint = Neon.Pink)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                (if (isStreamUrl(u)) "▶ Stream • " else "") + FileUtils.nameFrom(null, u, null),
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+            if (found.isEmpty()) {
+                Text(stringResource(R.string.capture_none))
+            } else {
+                LazyColumn(Modifier.heightIn(max = 460.dp)) {
+                    items(found) { f ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { onPick(f) }.padding(vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                if (f.quality < 0 || f.label == "MP3" || f.label == "M4A") Icons.Filled.MusicNote else Icons.Filled.Movie,
+                                null, tint = Neon.Pink,
                             )
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val name = when (f.source) {
+                                        VideoCapture.Source.SITE -> choiceLabel(f.label ?: "BEST")
+                                        else -> when {
+                                            f.quality < 0 -> stringResource(R.string.cat_music)
+                                            f.quality == 0 -> f.label ?: stringResource(R.string.quality_unknown)
+                                            else -> qualityText(f.quality, f.label)
+                                        }
+                                    }
+                                    Text(name, style = MaterialTheme.typography.titleSmall)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(
+                                        f.ext, style = MaterialTheme.typography.labelSmall, color = Neon.Cyan,
+                                        modifier = Modifier
+                                            .border(1.dp, Neon.Cyan.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                                            .padding(horizontal = 6.dp, vertical = 1.dp),
+                                    )
+                                }
+                                Text(
+                                    stringResource(
+                                        when (f.source) {
+                                            VideoCapture.Source.PAGE -> R.string.capture_src_page
+                                            VideoCapture.Source.STREAM -> R.string.capture_src_stream
+                                            VideoCapture.Source.SITE -> R.string.capture_src_site
+                                        }
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                             Text(
-                                Uri.parse(u).host.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                if (f.size > 0) (if (f.estimated) "~" else "") + Formatter.formatShortFileSize(ctx, f.size)
+                                else stringResource(R.string.size_unknown),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Icon(Icons.Filled.Download, null, tint = Neon.Cyan)
+                        HorizontalDivider()
                     }
-                    HorizontalDivider()
                 }
             }
         },
