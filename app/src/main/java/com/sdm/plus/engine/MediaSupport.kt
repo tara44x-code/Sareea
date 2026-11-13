@@ -6,11 +6,13 @@ import com.sdm.plus.data.Settings
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
+import com.yausername.youtubedl_android.mapper.VideoFormat
 
 /** Video/audio from web pages, powered by yt-dlp. */
 object MediaSupport {
 
-    data class Choice(val label: String, val format: String, val sizeEstimate: Long)
+    /** [ext] is the file type the user gets (MP4, M4A, MP3…). */
+    data class Choice(val label: String, val format: String, val sizeEstimate: Long, val ext: String = "MP4")
 
     data class Meta(val title: String, val durationSec: Int, val choices: List<Choice>)
 
@@ -68,29 +70,55 @@ object MediaSupport {
         val req = YoutubeDLRequest(url).addOption("--no-playlist")
         val info = YoutubeDL.getInstance().getInfo(req)
         val formats = info.formats.orEmpty()
+        val duration = info.duration
 
-        val bestAudio = formats
-            .filter { (it.vcodec == null || it.vcodec == "none") && it.acodec != null && it.acodec != "none" }
-            .maxOfOrNull { sizeOf(it.fileSize, it.fileSizeApproximate) } ?: 0L
+        // Many sites (Facebook, Instagram…) don't send a file size; estimate it from bitrate × length.
+        fun sizeOf(f: VideoFormat, kbps: Int): Long = when {
+            f.fileSize > 0 -> f.fileSize
+            f.fileSizeApproximate > 0 -> f.fileSizeApproximate
+            kbps > 0 && duration > 0 -> kbps.toLong() * 1000 / 8 * duration
+            else -> 0L
+        }
 
-        val heights = formats
-            .filter { it.vcodec != null && it.vcodec != "none" && it.height > 0 }
-            .groupBy { it.height }
-            .mapValues { (_, list) -> list.maxOf { sizeOf(it.fileSize, it.fileSizeApproximate) } }
+        val audioOnly = formats.filter { (it.vcodec == null || it.vcodec == "none") && it.acodec != null && it.acodec != "none" }
+        val bestAudio = audioOnly.maxByOrNull { if (it.abr > 0) it.abr else it.tbr }
+        val bestAudioSize = bestAudio?.let { sizeOf(it, if (it.abr > 0) it.abr else it.tbr) } ?: 0L
+        val bestAudioExt = (audioOnly.firstOrNull { it.ext == "m4a" } ?: bestAudio)?.ext?.uppercase() ?: "M4A"
+
+        // Quality = the shorter side, so a vertical 1080×1920 video shows as 1080p (not 1920p).
+        val video = formats.filter { it.vcodec != null && it.vcodec != "none" && (it.height > 0 || it.width > 0) }
+        fun quality(f: VideoFormat) = if (f.width > 0 && f.height > 0) minOf(f.width, f.height) else maxOf(f.width, f.height)
+        val byQuality = video
+            .groupBy { quality(it) }
+            .mapValues { (_, list) -> list.maxBy { it.tbr } } // best stream of each quality
             .toSortedMap(compareByDescending { it })
 
         val choices = mutableListOf<Choice>()
-        val bestSize = heights.values.firstOrNull()?.let { if (it > 0) it + bestAudio else 0L } ?: 0L
-        choices += Choice("BEST", BEST, bestSize)
-        heights.forEach { (h, size) ->
-            if (h in listOf(2160, 1440, 1080, 720, 480, 360, 240, 144) || heights.size <= 6) {
-                choices += Choice("${h}p", "bv*[height<=$h]+ba/b[height<=$h]", if (size > 0) size + bestAudio else 0L)
+        val top = byQuality.values.firstOrNull()
+        val topSize = top?.let { f -> sizeOf(f, f.tbr).let { v -> if (v > 0 && hasNoAudio(f)) v + bestAudioSize else v } } ?: 0L
+        choices += Choice("BEST", BEST, topSize, "MP4")
+        byQuality.forEach { (q, f) ->
+            if (q in listOf(2160, 1440, 1080, 720, 480, 360, 240, 144) || byQuality.size <= 6) {
+                val id = f.formatId
+                // Exact stream picked by id; fall back to "best up to this size" if the id ever disappears.
+                val selector = if (id != null) "$id+ba/$id/bv*[height<=$q]+ba/b" else "bv*[height<=$q]+ba/b[height<=$q]"
+                val v = sizeOf(f, f.tbr)
+                val size = if (v > 0 && hasNoAudio(f)) v + bestAudioSize else v
+                choices += Choice(qualityName(q), selector, size, "MP4")
             }
         }
-        choices += Choice("M4A", "ba[ext=m4a]/ba/b", bestAudio)
-        choices += Choice("MP3", MP3, bestAudio)
+        choices += Choice("M4A", "ba[ext=m4a]/ba/b", bestAudioSize, bestAudioExt.takeIf { it.isNotBlank() } ?: "M4A")
+        choices += Choice("MP3", MP3, bestAudioSize, "MP3")
 
-        return Meta(info.title ?: info.fulltitle ?: url, info.duration, choices)
+        return Meta(info.title ?: info.fulltitle ?: url, duration, choices)
+    }
+
+    private fun hasNoAudio(f: VideoFormat) = f.acodec == null || f.acodec == "none"
+
+    private fun qualityName(q: Int): String = when {
+        q >= 2160 -> "4K"
+        q >= 1440 -> "2K"
+        else -> "${q}p"
     }
 
     /** Link points to a playlist (alone or together with a video). */
@@ -107,16 +135,14 @@ object MediaSupport {
 
     /** Quality list used for whole playlists (no per-video info needed). */
     fun genericChoices(): List<Choice> = listOf(
-        Choice("BEST", BEST, 0),
+        Choice("BEST", BEST, 0, "MP4"),
         Choice("1080p", "bv*[height<=1080]+ba/b[height<=1080]", 0),
         Choice("720p", "bv*[height<=720]+ba/b[height<=720]", 0),
         Choice("480p", "bv*[height<=480]+ba/b[height<=480]", 0),
         Choice("360p", "bv*[height<=360]+ba/b[height<=360]", 0),
-        Choice("M4A", "ba[ext=m4a]/ba/b", 0),
-        Choice("MP3", MP3, 0),
+        Choice("M4A", "ba[ext=m4a]/ba/b", 0, "M4A"),
+        Choice("MP3", MP3, 0, "MP3"),
     )
-
-    private fun sizeOf(a: Long, b: Long) = if (a > 0) a else b
 
     fun cancel(id: String) {
         runCatching { YoutubeDL.getInstance().destroyProcessById(id) }

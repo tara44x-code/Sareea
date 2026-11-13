@@ -3,7 +3,9 @@
 package com.sdm.plus.ui
 
 import android.text.format.Formatter
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -174,7 +176,17 @@ private fun QualityDialog(p: Prep.Media, onDismiss: () -> Unit, onPick: (MediaSu
                         }
                         Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.width(14.dp))
-                        Text(choiceLabel(c.label), Modifier.weight(1f))
+                        Text(choiceLabel(c.label))
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            c.ext,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Neon.Cyan,
+                            modifier = Modifier
+                                .border(1.dp, Neon.Cyan.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                                .padding(horizontal = 6.dp, vertical = 1.dp),
+                        )
+                        Spacer(Modifier.weight(1f))
                         Text(
                             if (c.sizeEstimate > 0 && !wholeList) "~" + Formatter.formatShortFileSize(ctx, c.sizeEstimate)
                             else if (wholeList) "" else stringResource(R.string.size_unknown),

@@ -37,6 +37,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FormatListNumbered
@@ -130,6 +131,8 @@ import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private enum class Screen { MAIN, BROWSER, SETTINGS }
+
+private const val GITHUB_URL = "https://github.com/tara44x-code"
 
 /** Things handed to the app from outside (share, browser "open with", .torrent files, clipboard). */
 class Incoming {
@@ -892,6 +895,16 @@ private fun SettingsScreen(settings: Settings, onBack: () -> Unit) {
                     stringResource(R.string.developer_name),
                     style = MaterialTheme.typography.titleMedium.copy(brush = Neon.brush, fontWeight = FontWeight.Bold),
                 )
+                Spacer(Modifier.height(6.dp))
+                TextButton(onClick = {
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(GITHUB_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }) {
+                    Icon(Icons.Filled.Code, null, tint = Neon.Cyan)
+                    Spacer(Modifier.width(8.dp))
+                    Text("github.com/tara44x-code", color = Neon.Cyan)
+                }
             }
         }
     }

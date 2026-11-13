@@ -361,7 +361,7 @@ fun BrowserScreen(
                                 progress = newProgress
                             }
 
-                            // Pop-ups: blocked unless the user tapped; tapped ones to other sites ask first.
+                            // Pop-ups: blocked unless the user tapped; tapped ones open in this tab (ads still blocked).
                             override fun onCreateWindow(view: WebView, isDialog: Boolean, isUserGesture: Boolean, resultMsg: Message): Boolean {
                                 if (appSettings.popupBlock && !isUserGesture) {
                                     blockedOnPage = blockedCounter.incrementAndGet()
@@ -377,15 +377,8 @@ fun BrowserScreen(
                                         when {
                                             blockerOn() && AdBlocker.isAd(r.url.host) ->
                                                 blockedOnPage = blockedCounter.incrementAndGet()
-                                            !appSettings.popupBlock || hostOf(target) == hostOf(pageUrl) ->
-                                                view.loadUrl(target)
-                                            else -> scope.launch {
-                                                val res = snackbar.showSnackbar(
-                                                    String.format(popupAsk, hostOf(target) ?: target),
-                                                    popupOpen, withDismissAction = true, duration = SnackbarDuration.Long,
-                                                )
-                                                if (res == SnackbarResult.ActionPerformed) view.loadUrl(target)
-                                            }
+                                            // The user tapped (download buttons often open a second page): open it right away.
+                                            else -> view.loadUrl(target)
                                         }
                                         return true
                                     }
