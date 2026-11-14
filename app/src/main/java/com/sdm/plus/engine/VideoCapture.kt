@@ -52,6 +52,7 @@ object VideoCapture {
     var b = f.getBoundingClientRect();
     if (b.width >= 200 && b.height >= 120) r.push({iframe: f.src});
   });
+  r.push({page: location.href});
   return r;
 })()
 """
@@ -61,9 +62,30 @@ object VideoCapture {
         val arr = runCatching { JSONArray(json) }.getOrNull() ?: return emptyList()
         return (0 until arr.length()).mapNotNull { i ->
             val o = arr.optJSONObject(i) ?: return@mapNotNull null
-            if (o.has("iframe")) return@mapNotNull null
+            if (o.has("iframe") || o.has("page")) return@mapNotNull null
             DomVideo(o.optString("src"), o.optInt("w"), o.optInt("h"), o.optDouble("d", 0.0))
         }
+    }
+
+    /** The address the page shows right now. */
+    fun parsePage(json: String?): String? {
+        if (json.isNullOrBlank() || json == "null") return null
+        val arr = runCatching { JSONArray(json) }.getOrNull() ?: return null
+        for (i in 0 until arr.length()) {
+            arr.optJSONObject(i)?.optString("page")?.takeIf { it.startsWith("http") }?.let { return it }
+        }
+        return null
+    }
+
+    /** YouTube home/feed/search pages: no single video to take. */
+    fun isYoutubeListPage(url: String): Boolean {
+        val u = runCatching { android.net.Uri.parse(url) }.getOrNull() ?: return false
+        val host = u.host?.lowercase() ?: return false
+        if (!(host == "youtube.com" || host.endsWith(".youtube.com"))) return false
+        val path = u.path.orEmpty()
+        val isVideo = path.startsWith("/watch") || path.startsWith("/shorts/") || path.startsWith("/live/") ||
+            path.startsWith("/playlist") || path.startsWith("/embed/")
+        return !isVideo
     }
 
     /** Player iframes on the page (embedded video servers). */

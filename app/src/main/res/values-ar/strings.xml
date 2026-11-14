@@ -144,4 +144,6 @@
     <string name="capture_src_site">من الموقع</string>
     <string name="quality_unknown">جودة غير معروفة</string>
     <string name="adblock_lists">قوائم uBlock Origin: EasyList و uBlock filters و uBlock badware و Liste AR (العربية) + StevenBlack</string>
+    <string name="capture_youtube_open">هذي صفحة قائمة بيوتيوب. افتح الفيديو نفسه (اضغط عليه)، وبعدين اضغط «التقط الفيديو».</string>
+    <string name="ok">تمام</string>
 </resources>

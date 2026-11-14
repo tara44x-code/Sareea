@@ -12,8 +12,8 @@ android {
         applicationId = "com.sdm.plus"
         minSdk = 29          // Android 10+
         targetSdk = 35
-        versionCode = 11
-        versionName = "2.9"
+        versionCode = 12
+        versionName = "3.0"
     }
 
     // Fixed key from GitHub secrets (see README): every build is signed the same way,

@@ -175,12 +175,19 @@ fun BrowserScreen(
         w.evaluateJavascript(VideoCapture.DOM_JS) { json ->
             val dom = VideoCapture.parseDom(json)
             val frames = VideoCapture.parseIframes(json)
-            val cookie = CookieManager.getInstance().getCookie(pu)
+            // The address the page really shows now (sites like YouTube change it without reloading).
+            val here = VideoCapture.parsePage(json) ?: pu
+            val pageTitleNow = w.title?.takeIf { it.isNotBlank() } ?: title
+            if (VideoCapture.isYoutubeListPage(here)) {
+                capture = Capture.Message(R.string.capture_youtube_open)
+                return@evaluateJavascript
+            }
+            val cookie = CookieManager.getInstance().getCookie(here)
             scope.launch {
                 val list = withContext(Dispatchers.IO) {
-                    runCatching { VideoCapture.analyze(context, pu, sniffed, dom, cookie, ua, frames, refs) }.getOrDefault(emptyList())
+                    runCatching { VideoCapture.analyze(context, here, sniffed, dom, cookie, ua, frames, refs) }.getOrDefault(emptyList())
                 }
-                if (capture == Capture.Loading) capture = Capture.Result(pu, title, ua, list, refs)
+                if (capture == Capture.Loading) capture = Capture.Result(here, pageTitleNow, ua, list, refs)
             }
         }
     }
@@ -213,7 +220,11 @@ fun BrowserScreen(
         topBar = {
             TopAppBar(
                 navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
+                    // Previous page; only when there is none does it leave the browser.
+                    IconButton(onClick = {
+                        val w = webView
+                        if (w != null && w.canGoBack()) w.goBack() else onBack()
+                    }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
                 },
                 title = {
                     TextField(
@@ -368,6 +379,14 @@ fun BrowserScreen(
                                 blockedOnPage = 0
                             }
 
+                            override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
+                                if (url.startsWith("http") && url != pageUrl) {
+                                    address = url
+                                    pageUrl = url
+                                    pageTitle = view.title.orEmpty()
+                                }
+                            }
+
                             override fun onPageFinished(view: WebView, url: String) {
                                 address = url
                                 pageUrl = url
@@ -490,6 +509,12 @@ fun BrowserScreen(
             confirmButton = {},
             dismissButton = { TextButton(onClick = { capture = null }) { Text(stringResource(R.string.cancel)) } },
         )
+        is Capture.Message -> AlertDialog(
+            onDismissRequest = { capture = null },
+            title = { Text(stringResource(R.string.capture_title)) },
+            text = { Text(stringResource(c.text)) },
+            confirmButton = { TextButton(onClick = { capture = null }) { Text(stringResource(R.string.ok)) } },
+        )
         is Capture.Result -> CaptureDialog(c.found, onDismiss = { capture = null }) { f ->
             capture = null
             val title = c.title.ifBlank { null }
@@ -514,6 +539,7 @@ fun BrowserScreen(
 
 private sealed interface Capture {
     data object Loading : Capture
+    data class Message(val text: Int) : Capture
     data class Result(
         val pageUrl: String, val title: String, val userAgent: String?,
         val found: List<VideoCapture.Found>, val referers: Map<String, String>,

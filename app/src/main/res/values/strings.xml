@@ -144,4 +144,6 @@
     <string name="capture_src_site">From the site</string>
     <string name="quality_unknown">Unknown quality</string>
     <string name="adblock_lists">uBlock Origin lists: EasyList, uBlock filters, uBlock badware, Liste AR + StevenBlack</string>
+    <string name="capture_youtube_open">This is a YouTube list page. Open the video itself (tap it), then tap Capture.</string>
+    <string name="ok">OK</string>
 </resources>
