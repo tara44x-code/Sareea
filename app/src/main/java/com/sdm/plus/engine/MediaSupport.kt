@@ -68,6 +68,7 @@ object MediaSupport {
     fun fetch(ctx: Context, url: String): Meta {
         ensureInit(ctx)
         val req = YoutubeDLRequest(url).addOption("--no-playlist")
+        cookieFile(ctx, url)?.let { req.addOption("--cookies", it.absolutePath) }
         val info = YoutubeDL.getInstance().getInfo(req)
         val formats = info.formats.orEmpty()
         val duration = info.duration
@@ -143,6 +144,43 @@ object MediaSupport {
         Choice("M4A", "ba[ext=m4a]/ba/b", 0, "M4A"),
         Choice("MP3", MP3, 0, "MP3"),
     )
+
+    /**
+     * Your sign-in from the built-in browser, written as a cookies.txt file (the format yt-dlp
+     * officially accepts). YouTube's "Please sign in / not a bot" check passes with it.
+     * Kept in the app's private storage; null when you are not signed in to that site.
+     */
+    fun cookieFile(ctx: Context, url: String): java.io.File? = runCatching {
+        val host = Uri.parse(url).host?.lowercase() ?: return null
+        val parts = host.split('.')
+        val site = if (parts.size >= 2) parts.takeLast(2).joinToString(".") else host
+        // YouTube sign-in also lives on google.com.
+        val domains = buildList {
+            add(site)
+            if (site == "youtube.com" || site == "youtu.be") { add("youtube.com"); add("google.com") }
+        }.distinct()
+        val cm = android.webkit.CookieManager.getInstance()
+        val lines = StringBuilder("# Netscape HTTP Cookie File\n")
+        var count = 0
+        val expires = System.currentTimeMillis() / 1000 + 180L * 24 * 3600
+        for (d in domains) {
+            val seen = HashSet<String>()
+            for (sub in listOf("https://www.$d", "https://m.$d", "https://$d", "https://accounts.$d")) {
+                val raw = cm.getCookie(sub) ?: continue
+                for (pair in raw.split(';')) {
+                    val name = pair.substringBefore('=').trim()
+                    val value = pair.substringAfter('=', "").trim()
+                    if (name.isEmpty() || !seen.add(name)) continue
+                    lines.append(".$d\tTRUE\t/\tTRUE\t$expires\t$name\t$value\n")
+                    count++
+                }
+            }
+        }
+        if (count == 0) return null
+        val f = java.io.File(ctx.cacheDir, "cookies-$site.txt")
+        f.writeText(lines.toString())
+        f
+    }.getOrNull()
 
     fun cancel(id: String) {
         runCatching { YoutubeDL.getInstance().destroyProcessById(id) }

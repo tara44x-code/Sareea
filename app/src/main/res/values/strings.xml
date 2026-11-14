@@ -146,4 +146,5 @@
     <string name="adblock_lists">uBlock Origin lists: EasyList, uBlock filters, uBlock badware, Liste AR + StevenBlack</string>
     <string name="capture_youtube_open">This is a YouTube list page. Open the video itself (tap it), then tap Capture.</string>
     <string name="ok">OK</string>
+    <string name="signin_hint">The site asks you to sign in. Open it in the built-in browser (🌐), sign in once, then try again.</string>
 </resources>

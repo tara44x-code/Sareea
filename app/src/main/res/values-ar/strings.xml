@@ -146,4 +146,5 @@
     <string name="adblock_lists">قوائم uBlock Origin: EasyList و uBlock filters و uBlock badware و Liste AR (العربية) + StevenBlack</string>
     <string name="capture_youtube_open">هذي صفحة قائمة بيوتيوب. افتح الفيديو نفسه (اضغط عليه)، وبعدين اضغط «التقط الفيديو».</string>
     <string name="ok">تمام</string>
+    <string name="signin_hint">الموقع يطلب تسجيل دخول. افتحه بالمتصفح الداخلي (🌐) وسجّل دخول مرة وحدة، وبعدين جرّب مرة ثانية.</string>
 </resources>

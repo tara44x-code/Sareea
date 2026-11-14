@@ -372,6 +372,8 @@ class DownloadEngine(
 
     private fun friendlyError(e: Throwable): String {
         val msg = e.message ?: e.javaClass.simpleName
+        val lower = msg.lowercase()
+        if (lower.contains("sign in") || lower.contains("not a bot")) return context.getString(com.sdm.plus.R.string.signin_hint)
         return msg.lineSequence().map { it.trim() }.lastOrNull { it.startsWith("ERROR") } ?: msg.take(200)
     }
 
@@ -749,7 +751,10 @@ class DownloadEngine(
                     .addOption("--embed-subs")
             }
         }
-        item.cookie?.takeIf { it.isNotBlank() }?.let { req.addOption("--add-header", "Cookie:$it") }
+        // Sign-in from the built-in browser (cookies.txt); fall back to the saved cookie header.
+        val cookies = MediaSupport.cookieFile(context, item.url)
+        if (cookies != null) req.addOption("--cookies", cookies.absolutePath)
+        else item.cookie?.takeIf { it.isNotBlank() }?.let { req.addOption("--add-header", "Cookie:$it") }
         item.referer?.takeIf { it.isNotBlank() }?.let { req.addOption("--referer", it) }
         item.userAgent?.let { req.addOption("--user-agent", it) }
         val limit = settings.speedLimitKBps

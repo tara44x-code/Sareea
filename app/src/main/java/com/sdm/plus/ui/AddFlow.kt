@@ -101,7 +101,11 @@ class AddFlow(
                     prep = null
                     val msg = (e.message ?: e.javaClass.simpleName).lineSequence()
                         .lastOrNull { it.trim().startsWith("ERROR") } ?: (e.message ?: "")
-                    snackbar.showSnackbar(context.getString(R.string.error_prefix, msg.take(160)))
+                    val lower = msg.lowercase()
+                    val text = if (lower.contains("sign in") || lower.contains("not a bot") || lower.contains("cookies"))
+                        context.getString(R.string.signin_hint)
+                    else context.getString(R.string.error_prefix, msg.take(160))
+                    snackbar.showSnackbar(text, withDismissAction = true, duration = androidx.compose.material3.SnackbarDuration.Long)
                 }
             }
         }
