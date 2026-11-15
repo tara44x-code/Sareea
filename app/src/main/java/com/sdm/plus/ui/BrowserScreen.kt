@@ -182,6 +182,12 @@ fun BrowserScreen(
                 capture = Capture.Message(R.string.capture_youtube_open)
                 return@evaluateJavascript
             }
+            // Known video sites (YouTube, TikTok, Instagram…): same full quality list as sharing a link.
+            if (MediaSupport.isMediaSite(here)) {
+                capture = null
+                currentFlow.submit(listOf(here), forceMedia = true)
+                return@evaluateJavascript
+            }
             val cookie = CookieManager.getInstance().getCookie(here)
             scope.launch {
                 val list = withContext(Dispatchers.IO) {

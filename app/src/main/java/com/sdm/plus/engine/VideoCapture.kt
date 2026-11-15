@@ -122,10 +122,10 @@ object VideoCapture {
             .distinct()
             .take(25)
 
-        // The site extractor runs alongside (max 25 s), on the page and on embedded players.
+        // The site extractor runs alongside (max 90 s: it may try several ways), on the page and on embedded players.
         val sites = (listOf(pageUrl) + iframes.filter { !AdBlocker.isAd(java.net.URI(it).host) }.take(3)).map { u ->
             async {
-                u to withTimeoutOrNull(25_000) { runInterruptible { runCatching { MediaSupport.fetch(ctx, u) }.getOrNull() } }
+                u to withTimeoutOrNull(90_000) { runInterruptible { runCatching { MediaSupport.fetch(ctx, u) }.getOrNull() } }
             }
         }
 
