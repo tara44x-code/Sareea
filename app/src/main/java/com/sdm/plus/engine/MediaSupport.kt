@@ -16,7 +16,7 @@ object MediaSupport {
 
     data class Meta(val title: String, val durationSec: Int, val choices: List<Choice>)
 
-    const val BEST = "bv*+ba/b"
+    const val BEST = "bv*+ba/b/bv*/ba"
     const val MP3 = "mp3:ba/b"
 
     private val lock = Any()
@@ -96,9 +96,12 @@ object MediaSupport {
         if (isYoutube(url)) youtubeAttempts.indexOf(a).takeIf { it >= 0 }?.let { youtubeStart = it }
     }
 
+    /** YouTube refused this way of asking (sign-in check, or no usable formats): try the next way. */
     fun isSignInError(e: Throwable): Boolean {
         val m = (e.message ?: "").lowercase()
-        return m.contains("sign in") || m.contains("not a bot") || m.contains("--cookies") || m.contains("login required")
+        return m.contains("sign in") || m.contains("not a bot") || m.contains("--cookies") || m.contains("login required") ||
+            m.contains("requested format is not available") || m.contains("no video formats") ||
+            m.contains("only images are available") || m.contains("po token") || m.contains("http error 403")
     }
 
     /** Adds sign-in and player options; returns true if a cookies file was used. */
@@ -127,7 +130,8 @@ object MediaSupport {
     }
 
     private fun fetchOnce(ctx: Context, url: String, attempt: Attempt): Meta {
-        val req = YoutubeDLRequest(url).addOption("--no-playlist")
+        // Accept whatever the site offers when only reading the list (the user picks afterwards).
+        val req = YoutubeDLRequest(url).addOption("--no-playlist").addOption("-f", "bv*+ba/b/bv*/ba/all")
         applyAttempt(req, ctx, url, attempt)
         val info = YoutubeDL.getInstance().getInfo(req)
         val formats = info.formats.orEmpty()
