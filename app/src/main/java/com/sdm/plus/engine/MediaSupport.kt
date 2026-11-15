@@ -65,10 +65,70 @@ object MediaSupport {
     }
 
     /** Reads the page and builds the quality list (1080p, 720p, audio…). */
+    /**
+     * How to ask YouTube: with your sign-in and/or as a different YouTube player.
+     * YouTube's "sign in / not a bot" check is stricter for some players than others,
+     * so on that error we move on to the next way automatically.
+     */
+    data class Attempt(val cookies: Boolean, val args: String?)
+
+    private val youtubeAttempts = listOf(
+        Attempt(true, null),
+        Attempt(true, "youtube:player_client=tv,web_safari,mweb"),
+        Attempt(false, "youtube:player_client=android_vr,ios,android"),
+        Attempt(false, "youtube:player_client=tv_simply,web_embedded"),
+    )
+
+    @Volatile
+    private var youtubeStart = 0
+
+    fun isYoutube(url: String): Boolean {
+        val h = runCatching { Uri.parse(url).host?.lowercase() }.getOrNull() ?: return false
+        return h == "youtu.be" || h == "youtube.com" || h.endsWith(".youtube.com")
+    }
+
+    /** Ways to try for this link, starting with the one that worked last time. */
+    fun attemptsFor(url: String): List<Attempt> =
+        if (isYoutube(url)) youtubeAttempts.drop(youtubeStart) + youtubeAttempts.take(youtubeStart)
+        else listOf(Attempt(true, null))
+
+    fun worked(url: String, a: Attempt) {
+        if (isYoutube(url)) youtubeAttempts.indexOf(a).takeIf { it >= 0 }?.let { youtubeStart = it }
+    }
+
+    fun isSignInError(e: Throwable): Boolean {
+        val m = (e.message ?: "").lowercase()
+        return m.contains("sign in") || m.contains("not a bot") || m.contains("--cookies") || m.contains("login required")
+    }
+
+    /** Adds sign-in and player options; returns true if a cookies file was used. */
+    fun applyAttempt(req: YoutubeDLRequest, ctx: Context, url: String, a: Attempt): Boolean {
+        var used = false
+        if (a.cookies) cookieFile(ctx, url)?.let { req.addOption("--cookies", it.absolutePath); used = true }
+        a.args?.let { req.addOption("--extractor-args", it) }
+        return used
+    }
+
     fun fetch(ctx: Context, url: String): Meta {
         ensureInit(ctx)
+        val attempts = attemptsFor(url)
+        var lastError: Exception? = null
+        for (a in attempts) {
+            try {
+                val meta = fetchOnce(ctx, url, a)
+                worked(url, a)
+                return meta
+            } catch (e: Exception) {
+                lastError = e
+                if (!isSignInError(e)) throw e
+            }
+        }
+        throw lastError ?: IllegalStateException("No result")
+    }
+
+    private fun fetchOnce(ctx: Context, url: String, attempt: Attempt): Meta {
         val req = YoutubeDLRequest(url).addOption("--no-playlist")
-        cookieFile(ctx, url)?.let { req.addOption("--cookies", it.absolutePath) }
+        applyAttempt(req, ctx, url, attempt)
         val info = YoutubeDL.getInstance().getInfo(req)
         val formats = info.formats.orEmpty()
         val duration = info.duration

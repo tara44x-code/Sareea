@@ -727,59 +727,74 @@ class DownloadEngine(
 
         val dir = File(partialDir, id).apply { mkdirs() }
         val fmt = item.format ?: MediaSupport.BEST
-        val req = YoutubeDLRequest(item.url)
-            .addOption("--no-mtime")
-            .addOption("--newline")
-        if (item.playlist) {
-            req.addOption("--yes-playlist")
-                .addOption("-o", File(dir, "%(playlist_title).80B/%(playlist_index)03d - %(title).100B.%(ext)s").absolutePath)
-        } else {
-            req.addOption("--no-playlist")
-                .addOption("-o", File(dir, "%(title).120B.%(ext)s").absolutePath)
-        }
-        if (fmt.startsWith("mp3:")) {
-            req.addOption("-f", fmt.removePrefix("mp3:"))
-                .addOption("-x")
-                .addOption("--audio-format", "mp3")
-        } else {
-            req.addOption("-f", fmt)
-                .addOption("--merge-output-format", "mp4")
-            if (settings.subtitles && item.formatLabel != "M4A") {
-                req.addOption("--write-subs")
-                    .addOption("--write-auto-subs")
-                    .addOption("--sub-langs", "ar.*,en.*")
-                    .addOption("--embed-subs")
+        fun buildRequest(attempt: MediaSupport.Attempt): YoutubeDLRequest {
+            val req = YoutubeDLRequest(item.url)
+                .addOption("--no-mtime")
+                .addOption("--newline")
+            if (item.playlist) {
+                req.addOption("--yes-playlist")
+                    .addOption("-o", File(dir, "%(playlist_title).80B/%(playlist_index)03d - %(title).100B.%(ext)s").absolutePath)
+            } else {
+                req.addOption("--no-playlist")
+                    .addOption("-o", File(dir, "%(title).120B.%(ext)s").absolutePath)
             }
+            if (fmt.startsWith("mp3:")) {
+                req.addOption("-f", fmt.removePrefix("mp3:"))
+                    .addOption("-x")
+                    .addOption("--audio-format", "mp3")
+            } else {
+                req.addOption("-f", fmt)
+                    .addOption("--merge-output-format", "mp4")
+                if (settings.subtitles && item.formatLabel != "M4A") {
+                    req.addOption("--write-subs")
+                        .addOption("--write-auto-subs")
+                        .addOption("--sub-langs", "ar.*,en.*")
+                        .addOption("--embed-subs")
+                }
+            }
+            // Sign-in from the built-in browser (cookies.txt) + which YouTube player to pretend to be.
+            val usedFile = MediaSupport.applyAttempt(req, context, item.url, attempt)
+            if (!usedFile && attempt.cookies) {
+                item.cookie?.takeIf { it.isNotBlank() }?.let { req.addOption("--add-header", "Cookie:$it") }
+            }
+            item.referer?.takeIf { it.isNotBlank() }?.let { req.addOption("--referer", it) }
+            if (attempt.cookies) item.userAgent?.let { req.addOption("--user-agent", it) }
+            val limit = settings.speedLimitKBps
+            if (limit > 0) req.addOption("-r", "${limit}K")
+            return req
         }
-        // Sign-in from the built-in browser (cookies.txt); fall back to the saved cookie header.
-        val cookies = MediaSupport.cookieFile(context, item.url)
-        if (cookies != null) req.addOption("--cookies", cookies.absolutePath)
-        else item.cookie?.takeIf { it.isNotBlank() }?.let { req.addOption("--add-header", "Cookie:$it") }
-        item.referer?.takeIf { it.isNotBlank() }?.let { req.addOption("--referer", it) }
-        item.userAgent?.let { req.addOption("--user-agent", it) }
-        val limit = settings.speedLimitKBps
-        if (limit > 0) req.addOption("-r", "${limit}K")
 
         edit(id) { it.copy(status = Status.DOWNLOADING, note = null) }
         var last = 0L
-        YoutubeDL.getInstance().execute(req, id) { progress, _, line ->
-            itemRe.find(line)?.let { m ->
-                val pos = "${m.groupValues[1]}/${m.groupValues[2]}"
-                edit(id) { it.copy(playlistPos = pos) }
-            }
-            val now = System.currentTimeMillis()
-            if (now - last < 500) return@execute
-            last = now
-            val total = sizeRe.find(line)?.let { toBytes(it.groupValues[1], it.groupValues[2]) } ?: -1L
-            val speed = speedRe.find(line)?.let { toBytes(it.groupValues[1], it.groupValues[2]) } ?: -1L
-            edit(id) {
-                if (it.status != Status.DOWNLOADING) return@edit it
-                val t = if (total > 0) total else it.totalBytes
-                it.copy(
-                    totalBytes = t,
-                    downloadedBytes = if (t > 0) (t * (progress.coerceIn(0f, 100f) / 100f)).toLong() else it.downloadedBytes,
-                    speedBps = if (speed >= 0) speed else it.speedBps,
-                )
+        val attempts = MediaSupport.attemptsFor(item.url)
+        for ((n, attempt) in attempts.withIndex()) {
+            try {
+                YoutubeDL.getInstance().execute(buildRequest(attempt), id) { progress, _, line ->
+                    itemRe.find(line)?.let { m ->
+                        val pos = "${m.groupValues[1]}/${m.groupValues[2]}"
+                        edit(id) { it.copy(playlistPos = pos) }
+                    }
+                    val now = System.currentTimeMillis()
+                    if (now - last < 500) return@execute
+                    last = now
+                    val total = sizeRe.find(line)?.let { toBytes(it.groupValues[1], it.groupValues[2]) } ?: -1L
+                    val speed = speedRe.find(line)?.let { toBytes(it.groupValues[1], it.groupValues[2]) } ?: -1L
+                    edit(id) {
+                        if (it.status != Status.DOWNLOADING) return@edit it
+                        val t = if (total > 0) total else it.totalBytes
+                        it.copy(
+                            totalBytes = t,
+                            downloadedBytes = if (t > 0) (t * (progress.coerceIn(0f, 100f) / 100f)).toLong() else it.downloadedBytes,
+                            speedBps = if (speed >= 0) speed else it.speedBps,
+                        )
+                    }
+                }
+                MediaSupport.worked(item.url, attempt)
+                break
+            } catch (e: Exception) {
+                coroutineContext.ensureActive()
+                // YouTube asked for sign-in: try the next player type before giving up.
+                if (!MediaSupport.isSignInError(e) || n == attempts.lastIndex) throw e
             }
         }
         coroutineContext.ensureActive()
