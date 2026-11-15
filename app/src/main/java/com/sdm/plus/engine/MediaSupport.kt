@@ -131,11 +131,19 @@ object MediaSupport {
 
     private fun fetchOnce(ctx: Context, url: String, attempt: Attempt): Meta {
         // Accept whatever the site offers when only reading the list (the user picks afterwards).
-        val req = YoutubeDLRequest(url).addOption("--no-playlist").addOption("-f", "bv*+ba/b/bv*/ba/all")
+        val req = YoutubeDLRequest(url).addOption("--no-playlist").addOption("-f", "bv*+ba/b/bv*/ba")
         applyAttempt(req, ctx, url, attempt)
         val info = YoutubeDL.getInstance().getInfo(req)
         val formats = info.formats.orEmpty()
         val duration = info.duration
+
+        // Sometimes YouTube answers a way of asking with only preview images (storyboards).
+        // That is not a real answer: fail so the next way is tried.
+        val real = formats.filter { (it.vcodec != null && it.vcodec != "none") || (it.acodec != null && it.acodec != "none") }
+        if (formats.isNotEmpty() && real.isEmpty()) throw java.io.IOException("no video formats (only images are available)")
+        if (isYoutube(url) && real.none { it.vcodec != null && it.vcodec != "none" && (it.height > 0 || it.width > 0) }) {
+            throw java.io.IOException("no video formats with a resolution")
+        }
 
         // Many sites (Facebook, Instagram…) don't send a file size; estimate it from bitrate × length.
         fun sizeOf(f: VideoFormat, kbps: Int): Long = when {
