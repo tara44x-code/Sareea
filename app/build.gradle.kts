@@ -12,8 +12,8 @@ android {
         applicationId = "com.sdm.plus"
         minSdk = 29          // Android 10+
         targetSdk = 35
-        versionCode = 17
-        versionName = "3.5"
+        versionCode = 18
+        versionName = "3.6"
     }
 
     // Fixed key from GitHub secrets (see README): every build is signed the same way,
@@ -90,6 +90,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.webkit:webkit:1.12.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     // Torrent engine (libtorrent)

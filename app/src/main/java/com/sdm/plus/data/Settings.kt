@@ -80,4 +80,19 @@ class Settings(context: Context) {
     var autoUpdateEngine: Boolean
         get() = p.getBoolean("autoUpdateEngine", true)
         set(v) = p.edit().putBoolean("autoUpdateEngine", v).apply()
+
+    /** Built-in browser shows the desktop version of sites. */
+    var desktopMode: Boolean
+        get() = p.getBoolean("desktopMode", false)
+        set(v) = p.edit().putBoolean("desktopMode", v).apply()
+
+    /** Built-in browser darkens sites that have no dark theme. */
+    var webDark: Boolean
+        get() = p.getBoolean("webDark", false)
+        set(v) = p.edit().putBoolean("webDark", v).apply()
+
+    /** Built-in browser text size in percent. */
+    var textZoom: Int
+        get() = p.getInt("textZoom", 100)
+        set(v) = p.edit().putInt("textZoom", v.coerceIn(50, 200)).apply()
 }

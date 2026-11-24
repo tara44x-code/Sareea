@@ -98,6 +98,26 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.sdm.plus.R
 import com.sdm.plus.data.Settings
 import com.sdm.plus.engine.AdBlocker
+import com.sdm.plus.data.Bookmark
+import com.sdm.plus.data.BrowserStore
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.CollectionsBookmark
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.DesktopWindows
+import androidx.compose.material.icons.filled.FormatSize
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.StarBorder
+import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material3.Checkbox
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import com.sdm.plus.engine.FilterEngine
 import com.sdm.plus.engine.DownloadEngine
 import com.sdm.plus.engine.FileUtils
@@ -133,6 +153,7 @@ fun BrowserScreen(
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
     val focus = LocalFocusManager.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
@@ -147,8 +168,22 @@ fun BrowserScreen(
     var blockedOnPage by remember { mutableIntStateOf(0) }
     var capture by remember { mutableStateOf<Capture?>(null) }
     val media = remember { mutableStateListOf<String>() }
+    // Subtitle files (srt/vtt/ass) the page or its player loaded.
+    val subs = remember { mutableStateListOf<String>() }
     val mediaReferers = remember { java.util.concurrent.ConcurrentHashMap<String, String>() }
     val blockedCounter = remember { AtomicInteger(0) }
+    val bookmarks by BrowserStore.bookmarks.collectAsStateWithLifecycle()
+    val folders by BrowserStore.folders.collectAsStateWithLifecycle()
+    var showLibrary by remember { mutableStateOf(false) }
+    var addingBookmark by remember { mutableStateOf<Bookmark?>(null) }
+    var desktop by remember { mutableStateOf(appSettings.desktopMode) }
+    var webDark by remember { mutableStateOf(appSettings.webDark) }
+    var findOpen by remember { mutableStateOf(false) }
+    var findQuery by remember { mutableStateOf("") }
+    var findResult by remember { mutableStateOf("") }
+    var textSizeDialog by remember { mutableStateOf(false) }
+    val generalName = stringResource(R.string.folder_general)
+    val copiedMsg = stringResource(R.string.link_copied)
 
     val caughtMsg = stringResource(R.string.catch_started)
     val noLinksMsg = stringResource(R.string.grab_none)
@@ -193,7 +228,10 @@ fun BrowserScreen(
                 val list = withContext(Dispatchers.IO) {
                     runCatching { VideoCapture.analyze(context, here, sniffed, dom, cookie, ua, frames, refs) }.getOrDefault(emptyList())
                 }
-                if (capture == Capture.Loading) capture = Capture.Result(here, pageTitleNow, ua, list, refs)
+                // Subtitles: files the player loaded + <track> elements on the page.
+                val subList = (subs.toList().map { it to "" } + VideoCapture.parseTracks(json))
+                    .distinctBy { it.first }
+                if (capture == Capture.Loading) capture = Capture.Result(here, pageTitleNow, ua, list, refs, subList)
             }
         }
     }
@@ -252,6 +290,18 @@ fun BrowserScreen(
                     )
                 },
                 actions = {
+                    // Star: add / edit this page in favourites.
+                    val saved = bookmarks.firstOrNull { BrowserStore.bookmarkFor(pageUrl)?.id == it.id }
+                    IconButton(onClick = {
+                        if (pageUrl.startsWith("http")) {
+                            addingBookmark = saved ?: BrowserStore.addBookmark(pageTitle.ifBlank { pageUrl }, pageUrl)
+                        }
+                    }) {
+                        Icon(
+                            if (saved != null) Icons.Filled.Star else Icons.Filled.StarBorder, stringResource(R.string.add_favorite),
+                            tint = if (saved != null) Neon.Pink else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     // Shield: ads blocked on this page; tap to switch the blocker off/on for this site.
                     if (appSettings.adBlock) {
                         val on = hostOf(pageUrl) !in appSettings.adAllowList
@@ -275,11 +325,65 @@ fun BrowserScreen(
                     Box {
                         IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, null) }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            Row(Modifier.padding(horizontal = 8.dp)) {
+                                IconButton(enabled = webView?.canGoForward() == true, onClick = { menu = false; webView?.goForward() }) {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowForward, stringResource(R.string.forward))
+                                }
+                                IconButton(onClick = { menu = false; webView?.reload() }) { Icon(Icons.Filled.Refresh, stringResource(R.string.reload)) }
+                                IconButton(onClick = { menu = false; webView?.loadUrl(appSettings.homePage) }) { Icon(Icons.Filled.Home, stringResource(R.string.home)) }
+                                IconButton(onClick = { menu = false; showLibrary = true }) { Icon(Icons.Filled.CollectionsBookmark, stringResource(R.string.library)) }
+                            }
+                            HorizontalDivider()
                             DropdownMenuItem(
-                                text = { Text(stringResource(R.string.reload)) },
-                                leadingIcon = { Icon(Icons.Filled.Refresh, null) },
-                                onClick = { menu = false; webView?.reload() },
+                                text = { Text(stringResource(R.string.library)) },
+                                leadingIcon = { Icon(Icons.Filled.CollectionsBookmark, null) },
+                                onClick = { menu = false; showLibrary = true },
                             )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.desktop_mode)) },
+                                leadingIcon = { Icon(Icons.Filled.DesktopWindows, null) },
+                                trailingIcon = { Checkbox(checked = desktop, onCheckedChange = null) },
+                                onClick = {
+                                    menu = false
+                                    desktop = !desktop
+                                    appSettings.desktopMode = desktop
+                                    webView?.let { w -> applyUserAgent(w, desktop); w.reload() }
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.find_in_page)) },
+                                leadingIcon = { Icon(Icons.Filled.Search, null) },
+                                onClick = { menu = false; findOpen = true },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.translate_page)) },
+                                leadingIcon = { Icon(Icons.Filled.Translate, null) },
+                                onClick = {
+                                    menu = false
+                                    if (pageUrl.startsWith("http")) {
+                                        webView?.loadUrl("https://translate.google.com/translate?sl=auto&tl=ar&u=" + URLEncoder.encode(pageUrl, "UTF-8"))
+                                    }
+                                },
+                            )
+                            if (darkSupported) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.web_dark)) },
+                                    leadingIcon = { Icon(Icons.Filled.DarkMode, null) },
+                                    trailingIcon = { Checkbox(checked = webDark, onCheckedChange = null) },
+                                    onClick = {
+                                        menu = false
+                                        webDark = !webDark
+                                        appSettings.webDark = webDark
+                                        webView?.let { w -> applyDark(w, webDark) }
+                                    },
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.text_size)) },
+                                leadingIcon = { Icon(Icons.Filled.FormatSize, null) },
+                                onClick = { menu = false; textSizeDialog = true },
+                            )
+                            HorizontalDivider()
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.video_from_page)) },
                                 leadingIcon = { Icon(Icons.Filled.VideoLibrary, null) },
@@ -300,10 +404,35 @@ fun BrowserScreen(
                                     }
                                 },
                             )
+                            HorizontalDivider()
                             DropdownMenuItem(
-                                text = { Text(stringResource(R.string.home)) },
-                                leadingIcon = { Icon(Icons.Filled.Home, null) },
-                                onClick = { menu = false; webView?.loadUrl(appSettings.homePage) },
+                                text = { Text(stringResource(R.string.share_link)) },
+                                leadingIcon = { Icon(Icons.Filled.Share, null) },
+                                onClick = {
+                                    menu = false
+                                    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, pageUrl)
+                                    context.startActivity(Intent.createChooser(send, null))
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.copy_link)) },
+                                leadingIcon = { Icon(Icons.Filled.ContentCopy, null) },
+                                onClick = {
+                                    menu = false
+                                    clipboard.setText(AnnotatedString(pageUrl))
+                                    Toast.makeText(context, copiedMsg, Toast.LENGTH_SHORT).show()
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.open_elsewhere)) },
+                                leadingIcon = { Icon(Icons.AutoMirrored.Filled.OpenInNew, null) },
+                                onClick = {
+                                    menu = false
+                                    runCatching {
+                                        val i = Intent(Intent.ACTION_VIEW, Uri.parse(pageUrl)).addCategory(Intent.CATEGORY_BROWSABLE)
+                                        context.startActivity(Intent.createChooser(i, null))
+                                    }
+                                },
                             )
                         }
                     }
@@ -314,6 +443,30 @@ fun BrowserScreen(
         Box(Modifier.fillMaxSize().padding(padding).imePadding()) {
         Column(Modifier.fillMaxSize()) {
             if (progress in 1..99) NeonProgress(progress / 100f)
+            if (findOpen) {
+                Row(
+                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextField(
+                        value = findQuery,
+                        onValueChange = { findQuery = it; webView?.findAllAsync(it) },
+                        singleLine = true,
+                        placeholder = { Text(stringResource(R.string.find_in_page)) },
+                        colors = TextFieldDefaults.colors(
+                            focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+                            focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
+                        ),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(findResult, style = MaterialTheme.typography.labelMedium, color = Neon.Cyan)
+                    IconButton(onClick = { webView?.findNext(false) }) { Icon(Icons.Filled.KeyboardArrowUp, null) }
+                    IconButton(onClick = { webView?.findNext(true) }) { Icon(Icons.Filled.KeyboardArrowDown, null) }
+                    IconButton(onClick = {
+                        findOpen = false; findQuery = ""; findResult = ""; webView?.clearMatches()
+                    }) { Icon(Icons.Filled.Close, null) }
+                }
+            }
             AndroidView(
                 modifier = Modifier.fillMaxSize(),
                 factory = { ctx ->
@@ -327,6 +480,15 @@ fun BrowserScreen(
                         settings.mediaPlaybackRequiresUserGesture = true
                         settings.setSupportMultipleWindows(true)
                         settings.javaScriptCanOpenWindowsAutomatically = !appSettings.popupBlock
+                        // Sites that work in Chrome but not here: look like Chrome, allow http images/media on https pages.
+                        settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                        settings.databaseEnabled = true
+                        settings.textZoom = appSettings.textZoom
+                        applyUserAgent(this, desktop)
+                        applyDark(this, webDark)
+                        setFindListener { active, count, done ->
+                            if (done) findResult = if (count == 0) "0/0" else "${active + 1}/$count"
+                        }
                         CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
                         webViewClient = object : WebViewClient() {
@@ -342,7 +504,13 @@ fun BrowserScreen(
                                     main.post { blockedOnPage = n }
                                     return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
                                 }
-                                // 2) Media sniffer: remember video/audio the page loads.
+                                // 2) Subtitles the player loads (film translations).
+                                if (isSubtitleUrl(url)) {
+                                    (request.requestHeaders["Referer"] ?: request.requestHeaders["referer"])
+                                        ?.let { mediaReferers[url] = it }
+                                    main.post { if (url !in subs && subs.size < 30) subs.add(url) }
+                                }
+                                // 3) Media sniffer: remember video/audio the page loads.
                                 if (isMediaUrl(url) && !AdBlocker.isAd(host)) {
                                     // Keep the referer the player used: video servers check it.
                                     (request.requestHeaders["Referer"] ?: request.requestHeaders["referer"])
@@ -364,7 +532,20 @@ fun BrowserScreen(
                                     return true
                                 }
                                 if (!u.startsWith("http")) {
-                                    // intent://, market:// … only when the user actually tapped something.
+                                    // "Open in app" links: use the site's web fallback when it has one.
+                                    if (u.startsWith("intent:", true)) {
+                                        val intent = runCatching { Intent.parseUri(u, Intent.URI_INTENT_SCHEME) }.getOrNull()
+                                        val fallback = intent?.getStringExtra("browser_fallback_url")
+                                        if (fallback != null && fallback.startsWith("http")) {
+                                            view.loadUrl(fallback)
+                                            return true
+                                        }
+                                        if (request.hasGesture() && intent != null) runCatching {
+                                            ctx.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                        }
+                                        return true
+                                    }
+                                    // market://, tel:, mailto: … only when the user actually tapped something.
                                     if (request.hasGesture()) runCatching {
                                         ctx.startActivity(Intent(Intent.ACTION_VIEW, request.url).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                                     }
@@ -378,7 +559,7 @@ fun BrowserScreen(
                             }
 
                             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
-                                if (hostOf(url) != hostOf(pageUrl)) media.clear()
+                                if (hostOf(url) != hostOf(pageUrl)) { media.clear(); subs.clear() }
                                 address = url
                                 pageUrl = url
                                 blockedCounter.set(0)
@@ -390,6 +571,7 @@ fun BrowserScreen(
                                     address = url
                                     pageUrl = url
                                     pageTitle = view.title.orEmpty()
+                                    BrowserStore.addHistory(url, pageTitle)
                                 }
                             }
 
@@ -397,6 +579,9 @@ fun BrowserScreen(
                                 address = url
                                 pageUrl = url
                                 pageTitle = view.title.orEmpty()
+                                BrowserStore.addHistory(url, pageTitle)
+                                // Desktop mode: also stop pages from forcing a phone-width layout.
+                                if (desktop) view.evaluateJavascript(DESKTOP_VIEWPORT_JS, null)
                                 if (blockerOn()) {
                                     view.evaluateJavascript(AdBlocker.COSMETIC_JS, null)
                                     FilterEngine.cosmeticJs(hostOf(url)).forEach { view.evaluateJavascript(it, null) }
@@ -501,6 +686,48 @@ fun BrowserScreen(
         }
     }
 
+    if (showLibrary) {
+        Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+            LibraryScreen(
+                onOpen = { url -> showLibrary = false; webView?.loadUrl(url) },
+                onClose = { showLibrary = false },
+            )
+        }
+    }
+
+    addingBookmark?.let { b ->
+        BookmarkDialog(
+            b, folders, { f -> if (f.id == BrowserStore.GENERAL) generalName else f.name },
+            onDismiss = { addingBookmark = null },
+            onDelete = { BrowserStore.deleteBookmark(b.id); addingBookmark = null },
+        ) { BrowserStore.updateBookmark(it); addingBookmark = null }
+    }
+
+    if (textSizeDialog) {
+        var zoom by remember { mutableIntStateOf(appSettings.textZoom) }
+        AlertDialog(
+            onDismissRequest = { textSizeDialog = false },
+            title = { Text(stringResource(R.string.text_size) + " $zoom%") },
+            text = {
+                androidx.compose.material3.Slider(
+                    value = zoom.toFloat(),
+                    onValueChange = {
+                        zoom = (it / 10).toInt() * 10
+                        appSettings.textZoom = zoom
+                        webView?.settings?.textZoom = zoom
+                    },
+                    valueRange = 50f..200f,
+                )
+            },
+            confirmButton = { TextButton(onClick = { textSizeDialog = false }) { Text(stringResource(R.string.ok)) } },
+            dismissButton = {
+                TextButton(onClick = { zoom = 100; appSettings.textZoom = 100; webView?.settings?.textZoom = 100 }) {
+                    Text(stringResource(R.string.reset))
+                }
+            },
+        )
+    }
+
     when (val c = capture) {
         null -> {}
         Capture.Loading -> AlertDialog(
@@ -521,12 +748,28 @@ fun BrowserScreen(
             text = { Text(stringResource(c.text)) },
             confirmButton = { TextButton(onClick = { capture = null }) { Text(stringResource(R.string.ok)) } },
         )
-        is Capture.Result -> CaptureDialog(c.found, onDismiss = { capture = null }) { f ->
+        is Capture.Result -> CaptureDialog(
+            c.found, c.subs,
+            onDismiss = { capture = null },
+            onPickSub = { (url, label) ->
+                capture = null
+                val base = safeName(c.title.ifBlank { "subtitle" })
+                engine.addHttp(url, subName(base, url, label), CookieManager.getInstance().getCookie(url), c.referers[url] ?: c.pageUrl, c.userAgent)
+                Toast.makeText(context, String.format(caughtMsg, subName(base, url, label)), Toast.LENGTH_SHORT).show()
+            },
+        ) { f, withSubs ->
             capture = null
             val title = c.title.ifBlank { null }
+            // Film translation: save the subtitles next to the video, with the same name.
+            if (withSubs) {
+                val base = safeName(title ?: FileUtils.nameFrom(null, f.url, null).substringBeforeLast('.'))
+                c.subs.forEach { (url, label) ->
+                    engine.addHttp(url, subName(base, url, label), CookieManager.getInstance().getCookie(url), c.referers[url] ?: c.pageUrl, c.userAgent)
+                }
+            }
             when (f.source) {
                 VideoCapture.Source.PAGE -> {
-                    val name = title?.let { t -> t.take(80).replace(Regex("[\\\\/:*?\"<>|]"), "_").trim() + "." + f.ext.lowercase() }
+                    val name = title?.let { t -> safeName(t) + "." + f.ext.lowercase() }
                     engine.addHttp(f.url, name, CookieManager.getInstance().getCookie(f.url), f.referer ?: c.referers[f.url] ?: c.pageUrl, c.userAgent)
                 }
                 VideoCapture.Source.STREAM -> engine.addMedia(
@@ -543,12 +786,49 @@ fun BrowserScreen(
     }
 }
 
+private const val DESKTOP_UA =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+/** Desktop mode: widen the page even when it insists on a phone-sized viewport. */
+private const val DESKTOP_VIEWPORT_JS = """
+(function(){
+  var m = document.querySelector('meta[name=viewport]');
+  if (!m) { m = document.createElement('meta'); m.name = 'viewport'; (document.head||document.documentElement).appendChild(m); }
+  m.setAttribute('content', 'width=1280');
+})()
+"""
+
+/**
+ * Look like normal Chrome. Some sites hide content or send you to their app when they
+ * see an in-app browser ("; wv"), even though they work in Chrome.
+ */
+private fun applyUserAgent(w: WebView, desktop: Boolean) {
+    val s = w.settings
+    if (desktop) {
+        s.userAgentString = DESKTOP_UA
+        s.useWideViewPort = true
+        s.loadWithOverviewMode = true
+    } else {
+        val def = android.webkit.WebSettings.getDefaultUserAgent(w.context)
+        s.userAgentString = def.replace("; wv)", ")").replace(Regex("""Version/[\d.]+ """), "")
+    }
+}
+
+private val darkSupported: Boolean
+    get() = androidx.webkit.WebViewFeature.isFeatureSupported(androidx.webkit.WebViewFeature.ALGORITHMIC_DARKENING)
+
+/** Dark pages even on sites without a dark theme. */
+private fun applyDark(w: WebView, on: Boolean) {
+    if (darkSupported) runCatching { androidx.webkit.WebSettingsCompat.setAlgorithmicDarkeningAllowed(w.settings, on) }
+}
+
 private sealed interface Capture {
     data object Loading : Capture
     data class Message(val text: Int) : Capture
     data class Result(
         val pageUrl: String, val title: String, val userAgent: String?,
         val found: List<VideoCapture.Found>, val referers: Map<String, String>,
+        val subs: List<Pair<String, String>> = emptyList(), // url to language label
     ) : Capture
 }
 
@@ -563,19 +843,38 @@ private fun qualityText(q: Int, label: String?): String = when {
 }
 
 @Composable
-private fun CaptureDialog(found: List<VideoCapture.Found>, onDismiss: () -> Unit, onPick: (VideoCapture.Found) -> Unit) {
+private fun CaptureDialog(
+    found: List<VideoCapture.Found>,
+    subs: List<Pair<String, String>>,
+    onDismiss: () -> Unit,
+    onPickSub: (Pair<String, String>) -> Unit,
+    onPick: (VideoCapture.Found, Boolean) -> Unit,
+) {
     val ctx = LocalContext.current
+    var withSubs by remember { mutableStateOf(subs.isNotEmpty()) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.capture_title)) },
         text = {
-            if (found.isEmpty()) {
+            if (found.isEmpty() && subs.isEmpty()) {
                 Text(stringResource(R.string.capture_none))
             } else {
                 LazyColumn(Modifier.heightIn(max = 460.dp)) {
+                    if (subs.isNotEmpty() && found.isNotEmpty()) {
+                        item {
+                            Row(
+                                Modifier.fillMaxWidth().clickable { withSubs = !withSubs },
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(checked = withSubs, onCheckedChange = { withSubs = it })
+                                Text(stringResource(R.string.with_subtitles, subs.size), style = MaterialTheme.typography.titleSmall, color = Neon.Cyan)
+                            }
+                            HorizontalDivider()
+                        }
+                    }
                     items(found) { f ->
                         Row(
-                            Modifier.fillMaxWidth().clickable { onPick(f) }.padding(vertical = 10.dp),
+                            Modifier.fillMaxWidth().clickable { onPick(f, withSubs) }.padding(vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
@@ -623,12 +922,77 @@ private fun CaptureDialog(found: List<VideoCapture.Found>, onDismiss: () -> Unit
                         }
                         HorizontalDivider()
                     }
+                    if (subs.isNotEmpty()) {
+                        item {
+                            Text(
+                                stringResource(R.string.subtitles_title),
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                            )
+                        }
+                        items(subs) { sub ->
+                            Row(
+                                Modifier.fillMaxWidth().clickable { onPickSub(sub) }.padding(vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(Icons.Filled.Subtitles, null, tint = Neon.Cyan)
+                                Spacer(Modifier.width(12.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        sub.second.ifBlank { langFromUrl(sub.first) ?: stringResource(R.string.subtitle) },
+                                        style = MaterialTheme.typography.titleSmall,
+                                    )
+                                    Text(
+                                        FileUtils.nameFrom(null, sub.first, null),
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Text(
+                                    VideoCapture.extOf(sub.first).uppercase().ifEmpty { "SRT" },
+                                    style = MaterialTheme.typography.labelSmall, color = Neon.Cyan,
+                                    modifier = Modifier
+                                        .border(1.dp, Neon.Cyan.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 6.dp, vertical = 1.dp),
+                                )
+                            }
+                            HorizontalDivider()
+                        }
+                    }
                 }
             }
         },
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
+}
+
+private val subtitleExt = setOf("srt", "vtt", "ass", "ssa", "sub")
+
+private fun isSubtitleUrl(url: String): Boolean =
+    url.startsWith("http") && (extOf(url) in subtitleExt || Regex("""[./_-](srt|vtt)(\?|$)""").containsMatchIn(url.lowercase()))
+
+private fun safeName(t: String): String = t.take(80).replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifEmpty { "video" }
+
+/** Guess the language from names like movie.ar.srt, arabic.vtt, sub_en.vtt. */
+private fun langFromUrl(url: String): String? {
+    val n = url.substringBefore('?').substringAfterLast('/').lowercase()
+    return when {
+        n.contains("arab") || Regex("""[._-]ar[._-]""").containsMatchIn(n) || n.startsWith("ar.") -> "العربية"
+        n.contains("engl") || Regex("""[._-]en[._-]""").containsMatchIn(n) || n.startsWith("en.") -> "English"
+        else -> null
+    }
+}
+
+/** movie.ar.srt — same name as the video so players load it automatically. */
+private fun subName(base: String, url: String, label: String): String {
+    val ext = VideoCapture.extOf(url).takeIf { it in subtitleExt } ?: "srt"
+    val lang = when {
+        label.isNotBlank() -> label.take(12).replace(Regex("[^\\p{L}\\p{N}]"), "")
+        else -> when (langFromUrl(url)) { "العربية" -> "ar"; "English" -> "en"; else -> "" }
+    }
+    return if (lang.isEmpty()) "$base.$ext" else "$base.$lang.$ext"
 }
 
 private val mediaExt = setOf("mp4", "webm", "mkv", "mov", "m4v", "3gp", "mp3", "m4a", "aac", "ogg", "opus", "flac", "m3u8", "mpd")

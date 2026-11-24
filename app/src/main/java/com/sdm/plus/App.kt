@@ -25,6 +25,7 @@ class App : Application() {
         TorrentSupport.init(this)
         com.sdm.plus.engine.AdBlocker.init(this)
         com.sdm.plus.engine.FilterEngine.init(this)
+        com.sdm.plus.data.BrowserStore.init(this)
         Thread {
             com.sdm.plus.engine.AdBlocker.loadCached()
             com.sdm.plus.engine.FilterEngine.load()

@@ -52,6 +52,10 @@ object VideoCapture {
     var b = f.getBoundingClientRect();
     if (b.width >= 200 && b.height >= 120) r.push({iframe: f.src});
   });
+  // Subtitle tracks of the player (film translations).
+  document.querySelectorAll('track[src]').forEach(function(t){
+    r.push({track: t.src, label: t.label || t.srclang || ''});
+  });
   r.push({page: location.href});
   return r;
 })()
@@ -62,7 +66,7 @@ object VideoCapture {
         val arr = runCatching { JSONArray(json) }.getOrNull() ?: return emptyList()
         return (0 until arr.length()).mapNotNull { i ->
             val o = arr.optJSONObject(i) ?: return@mapNotNull null
-            if (o.has("iframe") || o.has("page")) return@mapNotNull null
+            if (o.has("iframe") || o.has("page") || o.has("track")) return@mapNotNull null
             DomVideo(o.optString("src"), o.optInt("w"), o.optInt("h"), o.optDouble("d", 0.0))
         }
     }
@@ -86,6 +90,17 @@ object VideoCapture {
         val isVideo = path.startsWith("/watch") || path.startsWith("/shorts/") || path.startsWith("/live/") ||
             path.startsWith("/playlist") || path.startsWith("/embed/")
         return !isVideo
+    }
+
+    /** <track> subtitles on the page: url to language label. */
+    fun parseTracks(json: String?): List<Pair<String, String>> {
+        if (json.isNullOrBlank() || json == "null") return emptyList()
+        val arr = runCatching { JSONArray(json) }.getOrNull() ?: return emptyList()
+        return (0 until arr.length()).mapNotNull { i ->
+            val o = arr.optJSONObject(i) ?: return@mapNotNull null
+            val src = o.optString("track").takeIf { it.startsWith("http") } ?: return@mapNotNull null
+            src to o.optString("label")
+        }
     }
 
     /** Player iframes on the page (embedded video servers). */
