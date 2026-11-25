@@ -179,4 +179,6 @@
     <string name="with_subtitles">Also download subtitles (%1$d)</string>
     <string name="subtitles_title">Subtitles</string>
     <string name="subtitle">Subtitle</string>
+    <string name="page_problems">Page diagnostics</string>
+    <string name="copy_report">Copy report</string>
 </resources>

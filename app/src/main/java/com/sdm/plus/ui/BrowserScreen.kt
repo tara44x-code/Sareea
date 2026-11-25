@@ -115,6 +115,7 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material3.Checkbox
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
@@ -182,6 +183,9 @@ fun BrowserScreen(
     var findQuery by remember { mutableStateOf("") }
     var findResult by remember { mutableStateOf("") }
     var textSizeDialog by remember { mutableStateOf(false) }
+    // Page diagnostics: what went wrong on this page (shown from the menu).
+    val problems = remember { mutableStateListOf<String>() }
+    var showProblems by remember { mutableStateOf(false) }
     val generalName = stringResource(R.string.folder_general)
     val copiedMsg = stringResource(R.string.link_copied)
 
@@ -237,7 +241,10 @@ fun BrowserScreen(
     }
 
     fun hostOf(url: String?) = runCatching { Uri.parse(url).host?.lowercase()?.removePrefix("www.") }.getOrNull()
-    fun blockerOn(): Boolean = appSettings.adBlock && hostOf(pageUrl) !in appSettings.adAllowList
+    fun blockerOn(): Boolean {
+        val h = hostOf(pageUrl)
+        return appSettings.adBlock && h !in appSettings.adAllowList && !neverBlock(h)
+    }
 
     fun load(input: String) {
         val t = input.trim()
@@ -406,6 +413,11 @@ fun BrowserScreen(
                             )
                             HorizontalDivider()
                             DropdownMenuItem(
+                                text = { Text(stringResource(R.string.page_problems) + if (problems.isEmpty()) "" else " (${problems.size})") },
+                                leadingIcon = { Icon(Icons.Filled.BugReport, null) },
+                                onClick = { menu = false; showProblems = true },
+                            )
+                            DropdownMenuItem(
                                 text = { Text(stringResource(R.string.share_link)) },
                                 leadingIcon = { Icon(Icons.Filled.Share, null) },
                                 onClick = {
@@ -501,7 +513,10 @@ fun BrowserScreen(
                                     ((AdBlocker.isAd(host) && !FilterEngine.isAllowed(url, host, ph)) || FilterEngine.shouldBlock(url, host, ph))
                                 ) {
                                     val n = blockedCounter.incrementAndGet()
-                                    main.post { blockedOnPage = n }
+                                    main.post {
+                                        blockedOnPage = n
+                                        if (problems.size < 60 && n <= 20) problems.add("BLOCKED $url")
+                                    }
                                     return WebResourceResponse("text/plain", "utf-8", ByteArrayInputStream(ByteArray(0)))
                                 }
                                 // 2) Subtitles the player loads (film translations).
@@ -558,7 +573,18 @@ fun BrowserScreen(
                                 return false
                             }
 
+                            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: android.webkit.WebResourceError) {
+                                val what = (if (request.isForMainFrame) "PAGE " else "") + "ERR ${error.errorCode} ${error.description} — ${request.url}"
+                                main.post { if (problems.size < 60) problems.add(what) }
+                            }
+
+                            override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse) {
+                                val what = (if (request.isForMainFrame) "PAGE " else "") + "HTTP ${errorResponse.statusCode} — ${request.url}"
+                                main.post { if (problems.size < 60) problems.add(what) }
+                            }
+
                             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+                                if (hostOf(url) != hostOf(pageUrl)) problems.clear()
                                 if (hostOf(url) != hostOf(pageUrl)) { media.clear(); subs.clear() }
                                 address = url
                                 pageUrl = url
@@ -591,6 +617,13 @@ fun BrowserScreen(
                         webChromeClient = object : WebChromeClient() {
                             override fun onProgressChanged(view: WebView, newProgress: Int) {
                                 progress = newProgress
+                            }
+
+                            override fun onConsoleMessage(m: android.webkit.ConsoleMessage): Boolean {
+                                if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR && problems.size < 60) {
+                                    problems.add("JS ${m.message().take(160)} (${m.sourceId().substringAfterLast('/').take(40)}:${m.lineNumber()})")
+                                }
+                                return false
                             }
 
                             // Pop-ups: blocked unless the user tapped; tapped ones open in this tab (ads still blocked).
@@ -684,6 +717,31 @@ fun BrowserScreen(
                 }
             }
         }
+    }
+
+    if (showProblems) {
+        val report = buildString {
+            appendLine(pageUrl)
+            appendLine("UA: " + (webView?.settings?.userAgentString ?: ""))
+            appendLine("Blocker: " + if (blockerOn()) "on" else "off")
+            if (problems.isEmpty()) appendLine("—") else problems.forEach { appendLine(it) }
+        }
+        AlertDialog(
+            onDismissRequest = { showProblems = false },
+            title = { Text(stringResource(R.string.page_problems)) },
+            text = {
+                LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    item { Text(report, style = MaterialTheme.typography.bodySmall) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    clipboard.setText(AnnotatedString(report))
+                    Toast.makeText(context, copiedMsg, Toast.LENGTH_SHORT).show()
+                }) { Text(stringResource(R.string.copy_report)) }
+            },
+            dismissButton = { TextButton(onClick = { showProblems = false }) { Text(stringResource(R.string.ok)) } },
+        )
     }
 
     if (showLibrary) {
@@ -784,6 +842,12 @@ fun BrowserScreen(
             Toast.makeText(context, String.format(caughtMsg, title ?: FileUtils.nameFrom(null, f.url, null)), Toast.LENGTH_SHORT).show()
         }
     }
+}
+
+/** Trusted local services where the ad blocker stays off (it could break them). */
+private fun neverBlock(host: String?): Boolean {
+    val h = host ?: return false
+    return listOf("shabakaty.com", "earthlink.iq").any { h == it || h.endsWith(".$it") }
 }
 
 private const val DESKTOP_UA =
